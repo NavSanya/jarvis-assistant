@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jarvis Voice Console</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260326-1438" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Jarvis Assistant Starter</p>
+        <h1>Voice Console</h1>
+        <p class="lede">
+          Record from your microphone, send text manually, and inspect the full
+          backend response in one place.
+        </p>
+      </section>
+
+      <section class="panel controls">
+        <div class="field-row">
+          <label class="field">
+            <span>Session ID</span>
+            <input id="sessionId" value="browser-demo" />
+          </label>
+          <label class="field">
+            <span>Transcript Override</span>
+            <input
+              id="transcriptOverride"
+              placeholder="Optional text to bypass Whisper during quick testing"
+            />
+          </label>
+        </div>
+
+        <div class="button-row">
+          <button id="recordButton" class="primary">Start Recording</button>
+          <button id="stopButton" disabled>Stop</button>
+          <button id="sendTextButton">Send Text Message</button>
+        </div>
+
+        <label class="field">
+          <span>Text Message</span>
+          <textarea
+            id="textMessage"
+            rows="4"
+            placeholder="Type here to test /api/chat without using the microphone"
+          ></textarea>
+        </label>
+
+        <p id="status" class="status">Idle. Open the microphone when you're ready.</p>
+      </section>
+
+      <section class="panel media">
+        <div>
+          <h2>Recorded Clip</h2>
+          <audio id="recordingPreview" controls></audio>
+        </div>
+        <div>
+          <h2>Assistant Output</h2>
+          <label class="field compact-field">
+            <span>Playback Speed</span>
+            <select id="playbackSpeed">
+              <option value="1">1.0x</option>
+              <option value="1.25" selected>1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2.0x</option>
+            </select>
+          </label>
+          <audio id="assistantAudio" controls></audio>
+          <p id="audioHint" class="hint">
+            Assistant audio will appear here when a real `.wav` response is generated.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel results">
+        <div class="result-card">
+          <h2>Transcript</h2>
+          <pre id="transcriptOutput">No transcript yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Assistant Message</h2>
+          <pre id="assistantOutput">No assistant response yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Raw JSON</h2>
+          <pre id="jsonOutput">No response yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Output Artifact</h2>
+          <pre id="artifactOutput">No artifact yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Emotion Details</h2>
+          <pre id="emotionOutput">No emotion metadata yet.</pre>
+        </div>
+      </section>
+
+      <section class="panel history">
+        <div class="history-header">
+          <h2>Recent Session History</h2>
+          <button id="refreshHistoryButton">Refresh History</button>
+        </div>
+        <div id="historyList" class="history-list">
+          <p class="hint">No conversation loaded yet.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js?v=20260326-1438"></script>
+  </body>
+  </html>
