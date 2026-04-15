@@ -24,8 +24,19 @@ class Settings(BaseSettings):
     whisper_language: str | None = "en"
     whisper_task: str = "transcribe"
     whisper_device: str | None = None
+    voice_understanding_provider: str = "legacy"
     emotion_model_name: str = "Dpngtm/wav2vec2-emotion-recognition"
     emotion_device: int = -1
+    sensevoice_model_name: str = "iic/SenseVoiceSmall"
+    sensevoice_device: str = "cpu"
+    sensevoice_language: str = "auto"
+    sensevoice_use_itn: bool = True
+    sensevoice_vad_model: str | None = "fsmn-vad"
+    sensevoice_cache_dir: str = ".cache/modelscope"
+    sensevoice_max_single_segment_time_ms: int = 30000
+    sensevoice_batch_size_s: int = 60
+    sensevoice_merge_vad: bool = True
+    sensevoice_merge_length_s: int = 15
     coqui_model_name: str = "tts_models/en/ljspeech/tacotron2-DDC"
     coqui_device: str | None = None
     audio_output_dir: str = "generated_audio"
@@ -49,6 +60,7 @@ class Settings(BaseSettings):
         "openai_api_key",
         "whisper_language",
         "whisper_device",
+        "sensevoice_vad_model",
         "coqui_device",
         mode="before",
     )

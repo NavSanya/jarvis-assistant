@@ -7,6 +7,7 @@ from app.schemas import ChatResponse, EmotionDebug, ToolCallResult
 from app.services.emotion import EmotionService
 from app.services.llm import LLMService
 from app.services.memory import MemoryService
+from app.services.sensevoice import SenseVoiceService
 from app.services.stt import SpeechToTextService
 from app.services.tools import MCPToolService
 from app.services.tts import TextToSpeechService
@@ -18,9 +19,22 @@ class AssistantOrchestrator:
         self.llm_service = llm_service
         self.memory_service = MemoryService()
         self.emotion_service = EmotionService(settings)
+        self.sensevoice_service = SenseVoiceService(settings)
         self.stt_service = SpeechToTextService(settings)
         self.tool_service = MCPToolService(settings)
         self.tts_service = TextToSpeechService(settings, Path(settings.audio_output_dir))
+
+    @property
+    def stt_provider_status(self) -> str:
+        if self.sensevoice_service.enabled:
+            return self.sensevoice_service.provider_status
+        return self.stt_service.provider_status
+
+    @property
+    def emotion_provider_status(self) -> str:
+        if self.sensevoice_service.enabled:
+            return self.sensevoice_service.provider_status
+        return self.emotion_service.provider_status
 
     async def handle_chat(
         self,
@@ -90,6 +104,24 @@ class AssistantOrchestrator:
         audio_path: Path,
         transcript_override: str | None = None,
     ) -> ChatResponse:
+        if self.sensevoice_service.enabled:
+            try:
+                sensevoice_result = await self.sensevoice_service.process(audio_path)
+                detected_emotion = str(sensevoice_result["final_emotion"])
+                transcript = transcript_override or str(sensevoice_result["transcript"])
+                emotion_debug = EmotionDebug(**sensevoice_result)
+                response = await self.handle_chat(
+                    db=db,
+                    session_id=session_id,
+                    message=transcript,
+                    detected_emotion=detected_emotion,
+                    emotion_debug=emotion_debug,
+                )
+                response.transcript = transcript
+                return response
+            except Exception:
+                pass
+
         transcript = await self.stt_service.transcribe(
             audio_path,
             transcript_override=transcript_override,

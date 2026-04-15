@@ -31,6 +31,7 @@ Microphone -> Python backend -> emotion detection -> agent/model -> MCP tools ->
 - Backend: FastAPI
 - LLM: Groq
 - STT: Whisper
+- Optional Voice Understanding: SenseVoice
 - TTS: Coqui TTS
 - Emotion: Hugging Face audio classification plus transcript cues
 - Database: SQLAlchemy async with MySQL target and SQLite fallback
@@ -91,6 +92,7 @@ Open:
 
 - Set `GROQ_API_KEY` in `.env`
 - Install `ffmpeg` locally for real Whisper transcription
+- Set `VOICE_UNDERSTANDING_PROVIDER=sensevoice` to use SenseVoice for transcript plus emotion
 - If MySQL is not running, the app falls back to SQLite when `ALLOW_SQLITE_FALLBACK=true`
 - Do not leave `WHISPER_DEVICE=` or `COQUI_DEVICE=` blank in `.env`
 - On Python `3.14`, Coqui may not be available; Python `3.11` or `3.12` is recommended for full voice output
@@ -98,6 +100,7 @@ Open:
 ## Runtime Behavior
 
 - voice responses can use real Whisper transcription when a valid audio file is uploaded
+- when `VOICE_UNDERSTANDING_PROVIDER=sensevoice`, the app uses SenseVoice for transcript + emotion and falls back to the legacy path on failure
 - `transcript_override` bypasses STT intentionally for quick testing
 - hybrid emotion inference combines audio tone and transcript cues
 - the browser UI auto-plays `.wav` assistant output when available
@@ -196,5 +199,3 @@ Recommended next improvements:
 - tighter production logging and error handling
 - real MySQL-first deployment setup
 - stronger multi-session conversation UX
-
-GROQ Key in oldstuff Readme
