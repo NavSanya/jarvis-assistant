@@ -21,11 +21,15 @@ class ToolCallResult(BaseModel):
 
 class EmotionDebug(BaseModel):
     final_emotion: str
-    audio_emotion: str
-    audio_score: float
-    text_emotion: str
-    text_score: float
+    audio_emotion: str | None = None
+    audio_score: float | None = None
+    text_emotion: str | None = None
+    text_score: float | None = None
     decision_source: str
+    provider: str | None = None
+    language: str | None = None
+    audio_event: str | None = None
+    raw_output: str | None = None
 
 
 class ChatResponse(BaseModel):

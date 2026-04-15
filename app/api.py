@@ -79,8 +79,8 @@ def create_app() -> FastAPI:
     async def health() -> HealthResponse:
         providers = {
             "llm": llm_service.provider_status,
-            "stt": orchestrator.stt_service.provider_status,
-            "emotion": orchestrator.emotion_service.provider_status,
+            "stt": orchestrator.stt_provider_status,
+            "emotion": orchestrator.emotion_provider_status,
             "tts": orchestrator.tts_service.provider_status,
             "mcp": orchestrator.tool_service.provider_status,
             "database": db_state.active_database_url.split("://", maxsplit=1)[0],
