@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,8 +11,19 @@ class Settings(BaseSettings):
     debug: bool = True
     api_prefix: str = "/api"
 
+    llm_provider: str = "groq"
+    llm_temperature: float = 0.4
+    llm_max_tokens: int = 300
+
     groq_api_key: str | None = None
     groq_model: str = "llama-3.3-70b-versatile"
+
+    bedrock_region: str = "us-west-2"
+    bedrock_model_id: str = "nvidia.nemotron-nano-12b-v2"
+    aws_profile_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("aws_profile_name", "AWS_PROFILE_NAME", "AWS_PROFILE"),
+    )
 
     openai_api_key: str | None = None
     realtime_model: str = "gpt-4o-mini-realtime-preview"
@@ -56,8 +67,10 @@ class Settings(BaseSettings):
     )
 
     @field_validator(
+        "llm_provider",
         "groq_api_key",
         "openai_api_key",
+        "aws_profile_name",
         "whisper_language",
         "whisper_device",
         "sensevoice_vad_model",
@@ -66,6 +79,8 @@ class Settings(BaseSettings):
     )
     @classmethod
     def empty_strings_to_none(cls, value: str | None):
+        if value is None:
+            return value
         if isinstance(value, str) and not value.strip():
             return None
         return value

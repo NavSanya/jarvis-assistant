@@ -10,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import db as db_state
 from app.config import get_settings
-from app.db import get_db_session, init_db
+from app.db import clear_all_conversation_history, get_db_session, init_db
 from app.schemas import (
     ChatRequest,
     ChatResponse,
     ConversationHistoryResponse,
     ConversationTurnOut,
     HealthResponse,
+    SimulatedWellnessSignal,
 )
 from app.services.llm import LLMService
 from app.services.memory import MemoryService
@@ -31,6 +32,7 @@ memory_service = MemoryService()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
+    await clear_all_conversation_history()
     yield
 
 
@@ -101,6 +103,7 @@ def create_app() -> FastAPI:
             db=db,
             session_id=payload.session_id,
             message=payload.message,
+            wellness_signal=payload.wellness_signal,
         )
 
     @app.get(
@@ -130,10 +133,24 @@ def create_app() -> FastAPI:
             ],
         )
 
+    @app.delete(f"{settings.api_prefix}/history/{{session_id}}", tags=["chat"])
+    async def clear_history(
+        session_id: str,
+        db: AsyncSession = Depends(get_db_session),
+    ) -> dict[str, int | str]:
+        deleted_turns = await memory_service.clear_session(db, session_id=session_id)
+        return {
+            "session_id": session_id,
+            "deleted_turns": deleted_turns,
+            "status": "cleared",
+        }
+
     @app.post(f"{settings.api_prefix}/voice", response_model=ChatResponse, tags=["voice"])
     async def voice(
         session_id: str = Form(...),
         transcript_override: str | None = Form(default=None),
+        wellness_heart_rate: int | None = Form(default=None),
+        wellness_stress_level: str | None = Form(default=None),
         audio: UploadFile = File(...),
         db: AsyncSession = Depends(get_db_session),
     ) -> ChatResponse:
@@ -141,12 +158,19 @@ def create_app() -> FastAPI:
         uploads_dir.mkdir(parents=True, exist_ok=True)
         target = uploads_dir / f"{uuid4()}-{audio.filename}"
         target.write_bytes(await audio.read())
+        wellness_signal = None
+        if wellness_heart_rate is not None or wellness_stress_level:
+            wellness_signal = SimulatedWellnessSignal(
+                heart_rate=wellness_heart_rate,
+                stress_level=wellness_stress_level,
+            )
 
         return await orchestrator.handle_voice(
             db=db,
             session_id=session_id,
             audio_path=target,
             transcript_override=transcript_override,
+            wellness_signal=wellness_signal,
         )
 
     @app.websocket("/ws/chat")

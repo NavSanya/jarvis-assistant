@@ -4,14 +4,22 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class SimulatedWellnessSignal(BaseModel):
+    heart_rate: int | None = Field(default=None, ge=40, le=180)
+    stress_level: str | None = None
+    source: str = "manual_demo"
+
+
 class ChatRequest(BaseModel):
     session_id: str = Field(default="default-session", min_length=1, max_length=100)
     message: str = Field(min_length=1)
+    wellness_signal: SimulatedWellnessSignal | None = None
 
 
 class VoiceRequest(BaseModel):
     session_id: str = Field(default="default-session", min_length=1, max_length=100)
     transcript_override: str | None = None
+    wellness_signal: SimulatedWellnessSignal | None = None
 
 
 class ToolCallResult(BaseModel):
@@ -41,6 +49,7 @@ class ChatResponse(BaseModel):
     transcript: str | None = None
     tools_used: list[ToolCallResult] = Field(default_factory=list)
     audio_path: str | None = None
+    wellness_signal: SimulatedWellnessSignal | None = None
 
 
 class ConversationTurnOut(BaseModel):

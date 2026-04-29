@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.schemas import ChatResponse, EmotionDebug, ToolCallResult
+from app.schemas import ChatResponse, EmotionDebug, SimulatedWellnessSignal, ToolCallResult
 from app.services.emotion import EmotionService
 from app.services.llm import LLMService
 from app.services.memory import MemoryService
@@ -44,11 +44,20 @@ class AssistantOrchestrator:
         message: str,
         detected_emotion: str = "neutral",
         emotion_debug: EmotionDebug | None = None,
+        wellness_signal: SimulatedWellnessSignal | None = None,
     ) -> ChatResponse:
+        if emotion_debug is None and detected_emotion == "neutral":
+            try:
+                text_emotion_result = await self.emotion_service.detect_from_text(message)
+                detected_emotion = str(text_emotion_result["final_emotion"])
+                emotion_debug = EmotionDebug(**text_emotion_result)
+            except Exception:
+                detected_emotion = "neutral"
+
         history = await self.memory_service.get_recent_turns(
-            db, session_id=session_id, limit=8
+            db, session_id=session_id, limit=12
         )
-        session_summary = " | ".join(f"{turn.role}: {turn.content}" for turn in history[-4:])
+        session_summary = " | ".join(f"{turn.role}: {turn.content}" for turn in history[-6:])
 
         tool_calls = []
         for tool_name in self.tool_service.discover_tool_calls(message):
@@ -67,6 +76,7 @@ class AssistantOrchestrator:
                 {"role": turn.role, "content": turn.content} for turn in history
             ],
             tool_outputs=[tool.model_dump() for tool in tool_calls],
+            wellness_signal=wellness_signal,
         )
 
         audio_path = await self.tts_service.synthesize(session_id, reply)
@@ -94,6 +104,7 @@ class AssistantOrchestrator:
             emotion_debug=emotion_debug,
             tools_used=tool_calls,
             audio_path=audio_path,
+            wellness_signal=wellness_signal,
         )
 
     async def handle_voice(
@@ -103,6 +114,7 @@ class AssistantOrchestrator:
         session_id: str,
         audio_path: Path,
         transcript_override: str | None = None,
+        wellness_signal: SimulatedWellnessSignal | None = None,
     ) -> ChatResponse:
         if self.sensevoice_service.enabled:
             try:
@@ -116,6 +128,7 @@ class AssistantOrchestrator:
                     message=transcript,
                     detected_emotion=detected_emotion,
                     emotion_debug=emotion_debug,
+                    wellness_signal=wellness_signal,
                 )
                 response.transcript = transcript
                 return response
@@ -142,6 +155,7 @@ class AssistantOrchestrator:
             message=transcript,
             detected_emotion=detected_emotion,
             emotion_debug=emotion_debug,
+            wellness_signal=wellness_signal,
         )
         response.transcript = transcript
         return response

@@ -4,17 +4,50 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jarvis Voice Console</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260326-1438" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Orbitron:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css?v=20260422-wellness-demo" />
   </head>
   <body>
     <main class="shell">
       <section class="hero">
         <p class="eyebrow">Jarvis Assistant Starter</p>
-        <h1>Voice Console</h1>
+        <h1>Conversation Console</h1>
         <p class="lede">
-          Record from your microphone, send text manually, and inspect the full
-          backend response in one place.
+          Run Jarvis like a live conversation: start a voice turn, end your turn,
+          and keep the session history flowing into the next response.
         </p>
+      </section>
+
+      <section class="panel mood-panel">
+        <div class="mood-copy">
+          <p class="eyebrow">Emotion Monitor</p>
+          <h2 id="moodTitle">Neutral</h2>
+          <p id="moodSummary" class="lede">
+            Waiting for a text or voice interaction to color the interface.
+          </p>
+        </div>
+        <div class="mood-visual" aria-hidden="true">
+          <div class="core-ring">
+            <div class="core-ring inner-ring">
+              <div id="moodCore" class="mood-core"></div>
+            </div>
+          </div>
+          <div class="wave-bars">
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+          </div>
+        </div>
       </section>
 
       <section class="panel controls">
@@ -32,10 +65,41 @@
           </label>
         </div>
 
+        <div class="field-row wellness-row">
+          <label class="field">
+            <span>Simulated Heart Rate</span>
+            <input
+              id="wellnessHeartRate"
+              type="number"
+              min="40"
+              max="180"
+              value="72"
+            />
+          </label>
+          <label class="field">
+            <span>Simulated Stress Level</span>
+            <select id="wellnessStressLevel">
+              <option value="">Off</option>
+              <option value="low">Low</option>
+              <option value="moderate" selected>Moderate</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="conversation-note">
+          Each session keeps recent turns in memory and includes them in the next reply.
+          Wake phrase: <strong>Hey JayJay</strong>. The UI will try to start listening on load,
+          then begin a voice turn automatically when it hears the cue. You can still use the
+          manual buttons anytime or begin a new conversation to clear the current session.
+          The wellness controls simulate future wearable input for the proposal demo.
+        </p>
+
         <div class="button-row">
-          <button id="recordButton" class="primary">Start Recording</button>
-          <button id="stopButton" disabled>Stop</button>
-          <button id="sendTextButton">Send Text Message</button>
+          <button id="recordButton" class="primary">Start Voice Turn</button>
+          <button id="stopButton" disabled>End Voice Turn</button>
+          <button id="sendTextButton">Send Text Turn</button>
+          <button id="clearConversationButton">New Conversation</button>
         </div>
 
         <label class="field">
@@ -47,7 +111,7 @@
           ></textarea>
         </label>
 
-        <p id="status" class="status">Idle. Open the microphone when you're ready.</p>
+        <p id="status" class="status">Idle. Start a voice turn or send a text turn when you're ready.</p>
       </section>
 
       <section class="panel media">
@@ -74,40 +138,40 @@
         </div>
       </section>
 
-      <section class="panel results">
-        <div class="result-card">
-          <h2>Transcript</h2>
-          <pre id="transcriptOutput">No transcript yet.</pre>
-        </div>
-        <div class="result-card">
-          <h2>Assistant Message</h2>
-          <pre id="assistantOutput">No assistant response yet.</pre>
-        </div>
-        <div class="result-card">
-          <h2>Raw JSON</h2>
-          <pre id="jsonOutput">No response yet.</pre>
-        </div>
-        <div class="result-card">
-          <h2>Output Artifact</h2>
-          <pre id="artifactOutput">No artifact yet.</pre>
-        </div>
-        <div class="result-card">
-          <h2>Emotion Details</h2>
-          <pre id="emotionOutput">No emotion metadata yet.</pre>
-        </div>
-      </section>
-
-      <section class="panel history">
+      <section class="panel history conversation-panel">
         <div class="history-header">
-          <h2>Recent Session History</h2>
+          <h2>Conversation Thread</h2>
           <button id="refreshHistoryButton">Refresh History</button>
         </div>
         <div id="historyList" class="history-list">
           <p class="hint">No conversation loaded yet.</p>
         </div>
       </section>
+
+      <section class="panel results diagnostics-panel">
+        <div class="result-card">
+          <h2>Latest Transcript</h2>
+          <pre id="transcriptOutput">No transcript yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Latest Assistant Reply</h2>
+          <pre id="assistantOutput">No assistant response yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Emotion Details</h2>
+          <pre id="emotionOutput">No emotion metadata yet.</pre>
+        </div>
+        <div class="result-card">
+          <h2>Output Artifact</h2>
+          <pre id="artifactOutput">No artifact yet.</pre>
+        </div>
+        <div class="result-card diagnostic-wide">
+          <h2>Raw JSON</h2>
+          <pre id="jsonOutput">No response yet.</pre>
+        </div>
+      </section>
     </main>
 
-    <script src="/static/app.js?v=20260326-1438"></script>
+    <script src="/static/app.js?v=20260422-wellness-demo"></script>
   </body>
   </html>

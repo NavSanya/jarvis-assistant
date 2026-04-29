@@ -1,10 +1,11 @@
 from collections.abc import AsyncIterator
 
+from sqlalchemy import delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
-from app.models import Base
+from app.models import Base, ConversationTurn
 
 settings = get_settings()
 
@@ -46,6 +47,12 @@ async def init_db() -> None:
             engine, expire_on_commit=False, class_=AsyncSession
         )
         active_database_url = settings.sqlite_fallback_url
+
+
+async def clear_all_conversation_history() -> None:
+    async with SessionLocal() as session:
+        await session.execute(delete(ConversationTurn))
+        await session.commit()
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:

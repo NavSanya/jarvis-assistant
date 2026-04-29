@@ -35,6 +35,8 @@ class EmotionService:
                 "tired",
                 "hurt",
                 "cry",
+                "lonely",
+                "hopeless",
             },
             "angry": {
                 "angry",
@@ -51,6 +53,10 @@ class EmotionService:
                 "worried",
                 "anxious",
                 "panic",
+                "overwhelmed",
+                "stressed",
+                "stress",
+                "tense",
             },
         }
 
@@ -113,6 +119,22 @@ class EmotionService:
                     best_score = score
 
         return (best_emotion, best_score)
+
+    async def detect_from_text(self, transcript: str) -> dict[str, object]:
+        text_emotion, text_score = await asyncio.to_thread(
+            self._detect_from_text,
+            transcript,
+        )
+        final_emotion = text_emotion if text_score > 0.0 else "neutral"
+        decision_source = "text_keywords" if text_score > 0.0 else "fallback"
+        return {
+            "final_emotion": final_emotion,
+            "audio_emotion": None,
+            "audio_score": None,
+            "text_emotion": text_emotion,
+            "text_score": round(text_score, 3),
+            "decision_source": decision_source,
+        }
 
     async def detect_from_audio(self, audio_path: Path) -> tuple[str, float]:
         if pipeline is None:
