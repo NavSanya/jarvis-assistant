@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ConversationTurn
@@ -36,3 +36,9 @@ class MemoryService:
         )
         result = await session.execute(stmt)
         return list(reversed(result.scalars().all()))
+
+    async def clear_session(self, session: AsyncSession, *, session_id: str) -> int:
+        stmt = delete(ConversationTurn).where(ConversationTurn.session_id == session_id)
+        result = await session.execute(stmt)
+        await session.commit()
+        return int(result.rowcount or 0)
