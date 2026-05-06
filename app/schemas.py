@@ -1,6 +1,4 @@
 from datetime import datetime
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 
@@ -20,11 +18,6 @@ class VoiceRequest(BaseModel):
     session_id: str = Field(default="default-session", min_length=1, max_length=100)
     transcript_override: str | None = None
     wellness_signal: SimulatedWellnessSignal | None = None
-
-
-class ToolCallResult(BaseModel):
-    tool_name: str
-    output: dict[str, Any]
 
 
 class EmotionDebug(BaseModel):
@@ -47,7 +40,6 @@ class ChatResponse(BaseModel):
     detected_emotion: str
     emotion_debug: EmotionDebug | None = None
     transcript: str | None = None
-    tools_used: list[ToolCallResult] = Field(default_factory=list)
     audio_path: str | None = None
     wellness_signal: SimulatedWellnessSignal | None = None
 

@@ -3,13 +3,12 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.schemas import ChatResponse, EmotionDebug, SimulatedWellnessSignal, ToolCallResult
+from app.schemas import ChatResponse, EmotionDebug, SimulatedWellnessSignal
 from app.services.emotion import EmotionService
 from app.services.llm import LLMService
 from app.services.memory import MemoryService
 from app.services.sensevoice import SenseVoiceService
 from app.services.stt import SpeechToTextService
-from app.services.tools import MCPToolService
 from app.services.tts import TextToSpeechService
 
 
@@ -21,7 +20,6 @@ class AssistantOrchestrator:
         self.emotion_service = EmotionService(settings)
         self.sensevoice_service = SenseVoiceService(settings)
         self.stt_service = SpeechToTextService(settings)
-        self.tool_service = MCPToolService(settings)
         self.tts_service = TextToSpeechService(settings, Path(settings.audio_output_dir))
 
     @property
@@ -57,17 +55,6 @@ class AssistantOrchestrator:
         history = await self.memory_service.get_recent_turns(
             db, session_id=session_id, limit=12
         )
-        session_summary = " | ".join(f"{turn.role}: {turn.content}" for turn in history[-6:])
-
-        tool_calls = []
-        for tool_name in self.tool_service.discover_tool_calls(message):
-            arguments = (
-                {"timezone": "America/Los_Angeles"}
-                if tool_name == "get_time"
-                else {"summary": session_summary}
-            )
-            output = await self.tool_service.run_tool(tool_name, arguments=arguments)
-            tool_calls.append(ToolCallResult(tool_name=tool_name, output=output))
 
         reply = await self.llm_service.generate_response(
             user_message=message,
@@ -75,7 +62,6 @@ class AssistantOrchestrator:
             conversation_context=[
                 {"role": turn.role, "content": turn.content} for turn in history
             ],
-            tool_outputs=[tool.model_dump() for tool in tool_calls],
             wellness_signal=wellness_signal,
         )
 
@@ -102,7 +88,6 @@ class AssistantOrchestrator:
             assistant_message=reply,
             detected_emotion=detected_emotion,
             emotion_debug=emotion_debug,
-            tools_used=tool_calls,
             audio_path=audio_path,
             wellness_signal=wellness_signal,
         )

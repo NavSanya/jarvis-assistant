@@ -19,7 +19,7 @@ from app.schemas import (
     HealthResponse,
     SimulatedWellnessSignal,
 )
-from app.services.llm import LLMService
+from app.services.llm import LLMService, LLMServiceError
 from app.services.memory import MemoryService
 from app.services.orchestrator import AssistantOrchestrator
 
@@ -66,6 +66,18 @@ def create_app() -> FastAPI:
             },
         )
 
+    @app.exception_handler(LLMServiceError)
+    async def llm_service_exception_handler(_, exc: LLMServiceError) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "detail": exc.detail,
+                "error": type(exc).__name__,
+                "message": str(exc),
+                "provider": settings.llm_provider,
+            },
+        )
+
     @app.get("/", tags=["meta"])
     async def root() -> dict[str, str]:
         return {
@@ -84,7 +96,6 @@ def create_app() -> FastAPI:
             "stt": orchestrator.stt_provider_status,
             "emotion": orchestrator.emotion_provider_status,
             "tts": orchestrator.tts_service.provider_status,
-            "mcp": orchestrator.tool_service.provider_status,
             "database": db_state.active_database_url.split("://", maxsplit=1)[0],
         }
         return HealthResponse(
@@ -179,18 +190,26 @@ def create_app() -> FastAPI:
         try:
             while True:
                 incoming = await websocket.receive_text()
-                reply = await llm_service.generate_response(
-                    user_message=incoming,
-                    emotion="neutral",
-                    conversation_context=[],
-                    tool_outputs=[],
-                )
-                await websocket.send_json(
-                    {
-                        "user_message": incoming,
-                        "assistant_message": reply,
-                    }
-                )
+                try:
+                    reply = await llm_service.generate_response(
+                        user_message=incoming,
+                        emotion="neutral",
+                        conversation_context=[],
+                    )
+                    await websocket.send_json(
+                        {
+                            "user_message": incoming,
+                            "assistant_message": reply,
+                        }
+                    )
+                except LLMServiceError as exc:
+                    await websocket.send_json(
+                        {
+                            "error": type(exc).__name__,
+                            "message": str(exc),
+                            "provider": settings.llm_provider,
+                        }
+                    )
         except WebSocketDisconnect:
             return
 

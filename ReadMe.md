@@ -5,13 +5,13 @@ A FastAPI-based voice assistant starter with:
 - speech-to-text with Whisper
 - hybrid emotion detection from audio + transcript cues
 - emotionally guided LLM responses with Groq or AWS Bedrock
+- ETL-style prompt templates with runtime context injection
 - browser-based conversation console
 - text-to-speech with Coqui
-- MCP tool support
 - SQLAlchemy-backed conversation storage
 
 ```text
-Microphone/Text -> Python backend -> emotion detection -> LLM/tool orchestration -> TTS -> browser playback
+Microphone/Text -> Python backend -> emotion detection -> LLM orchestration -> TTS -> browser playback
 ```
 
 ## What This App Does
@@ -44,7 +44,6 @@ Current startup behavior:
 - TTS: Coqui TTS
 - Emotion: Hugging Face audio classification plus transcript cues
 - Database: SQLAlchemy async with MySQL target and SQLite fallback
-- Tools: MCP Python SDK
 - Frontend: HTML, CSS, JavaScript
 
 ## Project Layout
@@ -55,7 +54,6 @@ jarvis-assistant/
 │   ├── api.py
 │   ├── config.py
 │   ├── db.py
-│   ├── mcp_server.py
 │   ├── models.py
 │   ├── schemas.py
 │   ├── services/
@@ -65,7 +63,6 @@ jarvis-assistant/
 │   │   ├── orchestrator.py
 │   │   ├── sensevoice.py
 │   │   ├── stt.py
-│   │   ├── tools.py
 │   │   └── tts.py
 │   └── static/
 │       ├── app.js
@@ -144,17 +141,37 @@ For Bedrock:
 
 ```env
 LLM_PROVIDER=bedrock
-BEDROCK_MODEL_ID=nvidia.nemotron-nano-12b-v2
+BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
 BEDROCK_REGION=us-west-2
 AWS_PROFILE_NAME=your_profile_if_needed
 ```
 
 Optional settings you may care about:
 
+- `LLM_PROMPT_TEMPLATE_PATH=prompts/jarvis_chat.txt`
+- `LLM_TOP_K=100`
+- `LLM_TOP_P=0.95`
 - `VOICE_UNDERSTANDING_PROVIDER=sensevoice`
 - `ALLOW_SQLITE_FALLBACK=true`
 - `WHISPER_MODEL_SIZE=base`
 - `AUDIO_OUTPUT_DIR=generated_audio`
+
+## Prompts And Context
+
+Jarvis now follows the same simple pattern as the ETL PDF pipeline:
+
+```text
+prompt template + runtime context payload + user message -> LLM response
+```
+
+The default template lives at `prompts/jarvis_chat.txt`. It uses placeholders:
+
+- `{{CONTEXT}}` or `{{PAYLOAD}}` for the injected JSON context
+- `{{USER_MESSAGE}}` for the current user turn
+
+The context payload includes recent conversation history, detected emotion,
+emotion guidance, and any simulated wellness signal. Edit the prompt file to change Jarvis'
+behavior without touching the Python code.
 
 ## How To Start The App
 
@@ -189,7 +206,7 @@ What you want to see:
 
 - `/` returns a simple app-running message
 - `/health` returns `status: ok`
-- `/health` shows the provider states for `llm`, `stt`, `emotion`, `tts`, `mcp`, and `database`
+- `/health` shows the provider states for `llm`, `stt`, `emotion`, `tts`, and `database`
 
 If you want a broader check, run:
 
@@ -554,7 +571,6 @@ Working now:
 - manual browser voice turns
 - text chat
 - simulated wellness input
-- MCP tool calls
 - session history endpoint and UI panel
 - Coqui-backed TTS when available
 - SQLite fallback when MySQL is unavailable
