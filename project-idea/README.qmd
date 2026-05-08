@@ -1,4 +1,12 @@
-# Jarvis Assistant Project Idea
+---
+title: Jarvis Assistant Project Idea
+author: Nav Sanya Anand
+format: 
+  html: 
+    mermaid: {}
+
+---
+
 
 This folder documents the current project idea and the working system flow for the
 Jarvis Assistant so far.
@@ -91,7 +99,7 @@ In legacy voice mode, Jarvis combines audio emotion and transcript keyword emoti
 
 ## Main Working Flow
 
-```mermaid
+```{mermaid}
 flowchart TD
     A[User opens browser UI at /ui] --> B{Interaction type}
 
@@ -130,7 +138,7 @@ flowchart TD
 
 ## Text Chat Flow
 
-```mermaid
+```{mermaid}
 flowchart TD
     A[User sends text] --> B[POST /api/chat]
     B --> C[Detect emotion from text keywords]
@@ -149,7 +157,7 @@ flowchart TD
 
 ## Emotion Decision Flow
 
-```mermaid
+```{mermaid}
 flowchart TD
     A[Transcript and optional audio clip] --> B{Voice path?}
     B -->|Text-only chat| C[Keyword emotion detector]
@@ -212,13 +220,3 @@ emotion-aware, supportive during distress, and careful not to invent personal fa
 - TTS attempts Coqui synthesis and gracefully falls back to text output when Coqui is
   unavailable.
 - Conversation history is persisted per session and cleared on app startup.
-
-## Suggested Next Build Ideas
-
-- Add explicit UI and LLM guidance for `disgust` if SenseVoice remains enabled later.
-- Add confidence values to the emotion monitor so demos show why a mood was selected.
-- Wire the configured realtime model into a separate realtime conversation path, or
-  remove it from config until that feature is planned.
-- Add automated tests for hybrid emotion branch decisions.
-- Persist history across restarts instead of clearing all conversation rows during app
-  lifespan startup.
