@@ -11,15 +11,18 @@ class Settings(BaseSettings):
     debug: bool = True
     api_prefix: str = "/api"
 
-    llm_provider: str = "groq"
+    llm_provider: str = "bedrock"
     llm_temperature: float = 0.4
     llm_max_tokens: int = 300
+    llm_top_k: int | None = None
+    llm_top_p: float | None = None
+    llm_prompt_template_path: str = "prompts/jarvis_chat.txt"
 
     groq_api_key: str | None = None
     groq_model: str = "llama-3.3-70b-versatile"
 
     bedrock_region: str = "us-west-2"
-    bedrock_model_id: str = "nvidia.nemotron-nano-12b-v2"
+    bedrock_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     aws_profile_name: str | None = Field(
         default=None,
         validation_alias=AliasChoices("aws_profile_name", "AWS_PROFILE_NAME", "AWS_PROFILE"),
@@ -52,9 +55,6 @@ class Settings(BaseSettings):
     coqui_device: str | None = None
     audio_output_dir: str = "generated_audio"
     upload_dir: str = "uploads"
-    mcp_server_command: str = "python"
-    mcp_server_script: str = "app/mcp_server.py"
-    mcp_timeout_seconds: float = 20.0
 
     cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"]
@@ -68,6 +68,9 @@ class Settings(BaseSettings):
 
     @field_validator(
         "llm_provider",
+        "llm_prompt_template_path",
+        "llm_top_k",
+        "llm_top_p",
         "groq_api_key",
         "openai_api_key",
         "aws_profile_name",
@@ -82,6 +85,27 @@ class Settings(BaseSettings):
         if value is None:
             return value
         if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("groq_api_key", "openai_api_key", mode="before")
+    @classmethod
+    def placeholder_api_keys_to_none(cls, value: str | None):
+        value = cls.empty_strings_to_none(value)
+        if not isinstance(value, str):
+            return value
+
+        normalized = value.strip().lower()
+        placeholder_values = {
+            "your_key_here",
+            "your_groq_api_key_here",
+            "your_openai_api_key_here",
+            "replace_me",
+            "changeme",
+        }
+        if normalized in placeholder_values:
+            return None
+        if normalized.startswith("your_") and normalized.endswith("_here"):
             return None
         return value
 

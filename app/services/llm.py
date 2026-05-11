@@ -1,14 +1,23 @@
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from app.config import Settings
 from app.schemas import SimulatedWellnessSignal
 
 try:
+    from groq import APIConnectionError as GroqAPIConnectionError
+    from groq import APIStatusError as GroqAPIStatusError
     from groq import AsyncGroq
+    from groq import AuthenticationError as GroqAuthenticationError
+    from groq import RateLimitError as GroqRateLimitError
 except ImportError:  # pragma: no cover - optional dependency
     AsyncGroq = None
+    GroqAPIConnectionError = None
+    GroqAPIStatusError = None
+    GroqAuthenticationError = None
+    GroqRateLimitError = None
 
 try:
     import boto3
@@ -16,6 +25,40 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     boto3 = None
     BotoCoreError = ClientError = Exception
+
+
+class LLMServiceError(RuntimeError):
+    status_code = 502
+    detail = "LLM provider unavailable"
+
+
+class LLMConfigurationError(LLMServiceError):
+    status_code = 503
+    detail = "LLM provider not configured"
+
+
+class LLMAuthenticationError(LLMServiceError):
+    status_code = 503
+    detail = "LLM provider authentication failed"
+
+
+class LLMRateLimitError(LLMServiceError):
+    status_code = 429
+    detail = "LLM provider rate limit exceeded"
+
+
+DEFAULT_PROMPT_TEMPLATE = """You are Jarvis, a calm and concise AI voice assistant.
+
+Use the context payload when it is relevant. Adapt your tone using the emotion guidance.
+Be supportive without making medical or mental health diagnoses.
+
+Context:
+{{CONTEXT}}
+
+User:
+{{USER_MESSAGE}}
+
+Assistant:"""
 
 
 class LLMService:
@@ -65,48 +108,59 @@ class LLMService:
             self.bedrock_error = f"bedrock init failed: {exc}"
             return None
 
+    def _load_prompt_template(self) -> str:
+        template_path = Path(self.settings.llm_prompt_template_path)
+        try:
+            return template_path.read_text(encoding="utf-8")
+        except OSError:
+            return DEFAULT_PROMPT_TEMPLATE
+
+    def _build_context_payload(
+        self,
+        *,
+        emotion: str,
+        conversation_context: list[dict[str, Any]],
+        wellness_signal: SimulatedWellnessSignal | None,
+    ) -> dict[str, Any]:
+        return {
+            "detected_emotion": emotion,
+            "emotion_guidance": self._emotion_guidance(
+                emotion,
+                wellness_signal=wellness_signal,
+            ),
+            "conversation_history": conversation_context,
+            "wellness_signal": wellness_signal.model_dump() if wellness_signal else None,
+        }
+
     def _build_prompt(
         self,
         *,
         user_message: str,
         emotion: str,
         conversation_context: list[dict[str, Any]],
-        tool_outputs: list[dict[str, Any]],
         wellness_signal: SimulatedWellnessSignal | None,
     ) -> str:
-        prompt_parts = [
-            (
-                "You are Jarvis, a calm and concise AI voice assistant. "
-                f"Adapt your tone to the user's detected emotion: {emotion}."
-            ),
-            "Use any supplied tool output when it is relevant to answering the user.",
-            self._emotion_guidance(emotion, wellness_signal=wellness_signal),
-            (
-                "Offer supportive, practical help when the user sounds distressed, but do not "
-                "claim to diagnose medical or mental health conditions."
-            ),
-        ]
+        context_payload = self._build_context_payload(
+            emotion=emotion,
+            conversation_context=conversation_context,
+            wellness_signal=wellness_signal,
+        )
+        context_json = json.dumps(context_payload, indent=2, default=str)
+        template = self._load_prompt_template()
+        has_context_placeholder = "{{CONTEXT}}" in template or "{{PAYLOAD}}" in template
+        has_message_placeholder = "{{USER_MESSAGE}}" in template
 
-        if wellness_signal is not None:
-            prompt_parts.append(
-                "Simulated wellness signal available: "
-                f"heart_rate={wellness_signal.heart_rate}, "
-                f"stress_level={wellness_signal.stress_level}, "
-                f"source={wellness_signal.source}."
-            )
+        rendered = template.replace("{{CONTEXT}}", context_json)
+        rendered = rendered.replace("{{PAYLOAD}}", context_json)
+        rendered = rendered.replace("{{USER_MESSAGE}}", user_message)
 
-        if conversation_context:
-            prompt_parts.append("Conversation so far:")
-            for item in conversation_context:
-                role = str(item["role"]).capitalize()
-                prompt_parts.append(f"{role}: {item['content']}")
-
-        if tool_outputs:
-            prompt_parts.append(f"Tool output available: {tool_outputs}")
-
-        prompt_parts.append(f"User: {user_message}")
-        prompt_parts.append("Assistant:")
-        return "\n\n".join(prompt_parts)
+        if not has_context_placeholder:
+            rendered = f"{rendered.rstrip()}\n\nContext:\n{context_json}"
+        if not has_message_placeholder:
+            rendered = f"{rendered.rstrip()}\n\nUser:\n{user_message}"
+        if not rendered.rstrip().endswith("Assistant:"):
+            rendered = f"{rendered.rstrip()}\n\nAssistant:"
+        return rendered.strip()
 
     def _emotion_guidance(
         self,
@@ -184,48 +238,78 @@ class LLMService:
 
     async def _generate_with_groq(self, messages: list[dict[str, str]]) -> str:
         if self.groq_client is None:
-            raise RuntimeError(
+            raise LLMConfigurationError(
                 "Groq is not configured. Add GROQ_API_KEY and install requirements."
             )
 
-        completion = await self.groq_client.chat.completions.create(
-            model=self.settings.groq_model,
-            messages=messages,
-            temperature=self.settings.llm_temperature,
-            max_tokens=self.settings.llm_max_tokens,
-        )
+        request_kwargs: dict[str, Any] = {
+            "model": self.settings.groq_model,
+            "messages": messages,
+            "max_tokens": self.settings.llm_max_tokens,
+        }
+        if self.settings.llm_top_p is not None:
+            request_kwargs["top_p"] = self.settings.llm_top_p
+        else:
+            request_kwargs["temperature"] = self.settings.llm_temperature
+
+        try:
+            completion = await self.groq_client.chat.completions.create(**request_kwargs)
+        except Exception as exc:
+            if GroqAuthenticationError is not None and isinstance(
+                exc,
+                GroqAuthenticationError,
+            ):
+                raise LLMAuthenticationError(
+                    "Groq rejected GROQ_API_KEY. Replace the placeholder or invalid key "
+                    "in .env with a valid Groq key, then restart the server."
+                ) from exc
+            if GroqRateLimitError is not None and isinstance(exc, GroqRateLimitError):
+                raise LLMRateLimitError(
+                    "Groq rate limit exceeded. Set a valid GROQ_API_KEY with available "
+                    "quota or try again later."
+                ) from exc
+            if GroqAPIConnectionError is not None and isinstance(
+                exc,
+                GroqAPIConnectionError,
+            ):
+                raise LLMServiceError(
+                    "Could not reach Groq. Check your network connection and try again."
+                ) from exc
+            if GroqAPIStatusError is not None and isinstance(exc, GroqAPIStatusError):
+                status_code = getattr(exc, "status_code", "unknown")
+                raise LLMServiceError(
+                    f"Groq request failed with status {status_code}."
+                ) from exc
+            raise
         return completion.choices[0].message.content or "I could not generate a reply."
 
     async def _generate_with_bedrock(
         self,
         *,
-        user_message: str,
-        emotion: str,
-        conversation_context: list[dict[str, Any]],
-        tool_outputs: list[dict[str, Any]],
-        wellness_signal: SimulatedWellnessSignal | None,
+        prompt: str,
     ) -> str:
         if self.bedrock_client is None:
-            raise RuntimeError(
+            raise LLMConfigurationError(
                 "Bedrock is not configured. Install boto3 and provide Bedrock settings."
             )
 
         payload = {
             "max_tokens": self.settings.llm_max_tokens,
-            "temperature": self.settings.llm_temperature,
             "messages": [
                 {
                     "role": "user",
-                    "content": self._build_prompt(
-                        user_message=user_message,
-                        emotion=emotion,
-                        conversation_context=conversation_context,
-                        tool_outputs=tool_outputs,
-                        wellness_signal=wellness_signal,
-                    ),
+                    "content": prompt,
                 }
             ],
         }
+        if self.settings.bedrock_model_id.startswith(("anthropic.", "us.anthropic.")):
+            payload["anthropic_version"] = "bedrock-2023-05-31"
+        if self.settings.llm_top_p is not None:
+            payload["top_p"] = self.settings.llm_top_p
+        else:
+            payload["temperature"] = self.settings.llm_temperature
+        if self.settings.llm_top_k is not None:
+            payload["top_k"] = self.settings.llm_top_k
 
         def invoke() -> dict[str, Any]:
             try:
@@ -237,7 +321,7 @@ class LLMService:
                 message = str(exc)
                 if isinstance(exc, ClientError):
                     message = exc.response.get("Error", {}).get("Message", str(exc))
-                raise RuntimeError(f"Bedrock invocation failed: {message}") from exc
+                raise LLMServiceError(f"Bedrock invocation failed: {message}") from exc
 
             return json.loads(response["body"].read())
 
@@ -251,63 +335,20 @@ class LLMService:
         user_message: str,
         emotion: str,
         conversation_context: list[dict[str, Any]],
-        tool_outputs: list[dict[str, Any]],
         wellness_signal: SimulatedWellnessSignal | None = None,
     ) -> str:
-        messages: list[dict[str, str]] = [
-            {
-                "role": "system",
-                "content": (
-                    "You are Jarvis, a calm and concise AI voice assistant. "
-                    "Use any supplied tool output when relevant, adapt tone "
-                    f"to the user's detected emotion: {emotion}, and stay supportive "
-                    "without making medical or mental health diagnoses."
-                ),
-            }
-        ]
-        messages.append(
-            {
-                "role": "system",
-                "content": self._emotion_guidance(
-                    emotion,
-                    wellness_signal=wellness_signal,
-                ),
-            }
+        prompt = self._build_prompt(
+            user_message=user_message,
+            emotion=emotion,
+            conversation_context=conversation_context,
+            wellness_signal=wellness_signal,
         )
-        for item in conversation_context:
-            messages.append({"role": item["role"], "content": item["content"]})
-
-        if tool_outputs:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": f"Tool output available: {tool_outputs}",
-                }
-            )
-
-        if wellness_signal is not None:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        "Simulated wellness signal available for this turn: "
-                        f"heart_rate={wellness_signal.heart_rate}, "
-                        f"stress_level={wellness_signal.stress_level}, "
-                        f"source={wellness_signal.source}."
-                    ),
-                }
-            )
-
-        messages.append({"role": "user", "content": user_message})
+        messages = [{"role": "user", "content": prompt}]
 
         if self.settings.llm_provider == "groq":
             return await self._generate_with_groq(messages)
         if self.settings.llm_provider == "bedrock":
-            return await self._generate_with_bedrock(
-                user_message=user_message,
-                emotion=emotion,
-                conversation_context=conversation_context,
-                tool_outputs=tool_outputs,
-                wellness_signal=wellness_signal,
-            )
-        raise RuntimeError(f"Unsupported llm provider: {self.settings.llm_provider}")
+            return await self._generate_with_bedrock(prompt=prompt)
+        raise LLMConfigurationError(
+            f"Unsupported llm provider: {self.settings.llm_provider}"
+        )

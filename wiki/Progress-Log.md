@@ -11,7 +11,6 @@ The app is now a working FastAPI-based voice assistant starter with:
 - Groq-based LLM responses
 - Whisper transcription
 - hybrid emotion inference from audio + transcript
-- MCP tools through the Python SDK
 - Coqui TTS support
 - browser microphone UI
 - conversation history storage
@@ -28,7 +27,6 @@ Working now:
 - real Whisper transcription with valid audio input
 - browser microphone capture through `/ui`
 - hybrid emotion labeling with debug metadata
-- MCP-backed tool invocation
 - session history API and UI panel
 - generated output artifacts
 - websocket test path
@@ -66,7 +64,6 @@ Implemented in:
 - `app/services/llm.py`
 - `app/services/stt.py`
 - `app/services/emotion.py`
-- `app/services/tools.py`
 - `app/services/tts.py`
 - `app/services/memory.py`
 - `app/services/orchestrator.py`
@@ -76,7 +73,6 @@ Current service behavior:
 - Groq handles response generation
 - Whisper handles speech-to-text
 - emotion detection blends audio classification with transcript cues
-- MCP tools are called through the Python SDK
 - Coqui generates speech when available
 - text artifacts are used as TTS fallback when needed
 
@@ -160,7 +156,6 @@ Expected outcomes:
 
 ## Recommended Next Steps
 
-- expand MCP tools into more useful assistant actions
 - add stronger automated API tests
 - improve production-style logging and diagnostics
 - move closer to a real MySQL-first deployment flow
