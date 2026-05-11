@@ -3,8 +3,6 @@ title: "Emotion-Personality RAG Flowchart"
 format: html
 ---
 
-# Emotion-Personality RAG Flowchart
-
 This document defines the next workflow for Jarvis: use a RAG system with
 personality-specific documentation for every emotion, then use sentiment and emotion
 analysis to produce a quantified, structured prompt context for the LLM.
