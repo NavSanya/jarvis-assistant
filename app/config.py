@@ -88,6 +88,17 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def debug_strings_to_bool(cls, value: bool | str):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"dev", "development"}:
+                return True
+        return value
+
     @field_validator("groq_api_key", "openai_api_key", mode="before")
     @classmethod
     def placeholder_api_keys_to_none(cls, value: str | None):

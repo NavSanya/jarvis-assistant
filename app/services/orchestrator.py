@@ -7,6 +7,7 @@ from app.schemas import ChatResponse, EmotionDebug, SimulatedWellnessSignal
 from app.services.emotion import EmotionService
 from app.services.llm import LLMService
 from app.services.memory import MemoryService
+from app.services.rag import DEFAULT_PERSONA, get_persona_metadata
 from app.services.sensevoice import SenseVoiceService
 from app.services.stt import SpeechToTextService
 from app.services.tts import TextToSpeechService
@@ -40,10 +41,14 @@ class AssistantOrchestrator:
         db: AsyncSession,
         session_id: str,
         message: str,
+        persona_id: str | None = DEFAULT_PERSONA,
         detected_emotion: str = "neutral",
         emotion_debug: EmotionDebug | None = None,
         wellness_signal: SimulatedWellnessSignal | None = None,
     ) -> ChatResponse:
+        persona_metadata = get_persona_metadata(persona_id)
+        resolved_persona_id = str(persona_metadata.get("persona_id", DEFAULT_PERSONA))
+
         if emotion_debug is None and detected_emotion == "neutral":
             try:
                 text_emotion_result = await self.emotion_service.detect_from_text(message)
@@ -62,6 +67,7 @@ class AssistantOrchestrator:
             conversation_context=[
                 {"role": turn.role, "content": turn.content} for turn in history
             ],
+            persona_id=resolved_persona_id,
             wellness_signal=wellness_signal,
         )
 
@@ -84,6 +90,7 @@ class AssistantOrchestrator:
 
         return ChatResponse(
             session_id=session_id,
+            persona_id=resolved_persona_id,
             user_message=message,
             assistant_message=reply,
             detected_emotion=detected_emotion,
@@ -98,6 +105,7 @@ class AssistantOrchestrator:
         db: AsyncSession,
         session_id: str,
         audio_path: Path,
+        persona_id: str | None = DEFAULT_PERSONA,
         transcript_override: str | None = None,
         wellness_signal: SimulatedWellnessSignal | None = None,
     ) -> ChatResponse:
@@ -111,6 +119,7 @@ class AssistantOrchestrator:
                     db=db,
                     session_id=session_id,
                     message=transcript,
+                    persona_id=persona_id,
                     detected_emotion=detected_emotion,
                     emotion_debug=emotion_debug,
                     wellness_signal=wellness_signal,
@@ -138,6 +147,7 @@ class AssistantOrchestrator:
             db=db,
             session_id=session_id,
             message=transcript,
+            persona_id=persona_id,
             detected_emotion=detected_emotion,
             emotion_debug=emotion_debug,
             wellness_signal=wellness_signal,

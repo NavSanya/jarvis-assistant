@@ -22,6 +22,7 @@ from app.schemas import (
 from app.services.llm import LLMService, LLMServiceError
 from app.services.memory import MemoryService
 from app.services.orchestrator import AssistantOrchestrator
+from app.services.rag import DEFAULT_PERSONA, list_personas
 
 settings = get_settings()
 llm_service = LLMService(settings)
@@ -114,8 +115,13 @@ def create_app() -> FastAPI:
             db=db,
             session_id=payload.session_id,
             message=payload.message,
+            persona_id=payload.persona_id,
             wellness_signal=payload.wellness_signal,
         )
+
+    @app.get(f"{settings.api_prefix}/personas", tags=["chat"])
+    async def personas() -> list[dict]:
+        return list_personas()
 
     @app.get(
         f"{settings.api_prefix}/history/{{session_id}}",
@@ -159,6 +165,7 @@ def create_app() -> FastAPI:
     @app.post(f"{settings.api_prefix}/voice", response_model=ChatResponse, tags=["voice"])
     async def voice(
         session_id: str = Form(...),
+        persona_id: str | None = Form(default=DEFAULT_PERSONA),
         transcript_override: str | None = Form(default=None),
         wellness_heart_rate: int | None = Form(default=None),
         wellness_stress_level: str | None = Form(default=None),
@@ -180,6 +187,7 @@ def create_app() -> FastAPI:
             db=db,
             session_id=session_id,
             audio_path=target,
+            persona_id=persona_id,
             transcript_override=transcript_override,
             wellness_signal=wellness_signal,
         )
@@ -195,6 +203,7 @@ def create_app() -> FastAPI:
                         user_message=incoming,
                         emotion="neutral",
                         conversation_context=[],
+                        persona_id=DEFAULT_PERSONA,
                     )
                     await websocket.send_json(
                         {

@@ -5,6 +5,7 @@ from typing import Any
 
 from app.config import Settings
 from app.schemas import SimulatedWellnessSignal
+from app.services.rag import get_persona_metadata, get_response_guidance
 
 try:
     from groq import APIConnectionError as GroqAPIConnectionError
@@ -88,6 +89,8 @@ class LLMService:
             return self.bedrock_error
         if provider == "bedrock" and boto3 is None:
             return "missing boto3"
+        if provider == "local":
+            return "configured (local deterministic)"
         return f"unsupported llm provider: {provider}"
 
     def _create_bedrock_client(self):
@@ -118,16 +121,23 @@ class LLMService:
     def _build_context_payload(
         self,
         *,
+        user_message: str,
         emotion: str,
+        persona_id: str | None,
         conversation_context: list[dict[str, Any]],
         wellness_signal: SimulatedWellnessSignal | None,
     ) -> dict[str, Any]:
+        persona = get_persona_metadata(persona_id)
+        guidance = get_response_guidance(
+            str(persona.get("persona_id", persona_id or "")),
+            emotion,
+        )
         return {
+            "user_text": user_message,
+            "emotion": emotion,
             "detected_emotion": emotion,
-            "emotion_guidance": self._emotion_guidance(
-                emotion,
-                wellness_signal=wellness_signal,
-            ),
+            "emotion_guidance": guidance,
+            "user_profile": persona,
             "conversation_history": conversation_context,
             "wellness_signal": wellness_signal.model_dump() if wellness_signal else None,
         }
@@ -137,11 +147,14 @@ class LLMService:
         *,
         user_message: str,
         emotion: str,
+        persona_id: str | None,
         conversation_context: list[dict[str, Any]],
         wellness_signal: SimulatedWellnessSignal | None,
     ) -> str:
         context_payload = self._build_context_payload(
+            user_message=user_message,
             emotion=emotion,
+            persona_id=persona_id,
             conversation_context=conversation_context,
             wellness_signal=wellness_signal,
         )
@@ -161,50 +174,6 @@ class LLMService:
         if not rendered.rstrip().endswith("Assistant:"):
             rendered = f"{rendered.rstrip()}\n\nAssistant:"
         return rendered.strip()
-
-    def _emotion_guidance(
-        self,
-        emotion: str,
-        *,
-        wellness_signal: SimulatedWellnessSignal | None,
-    ) -> str:
-        normalized_emotion = emotion.lower().strip()
-        stress_level = (wellness_signal.stress_level or "").lower().strip() if wellness_signal else ""
-        elevated_heart_rate = bool(
-            wellness_signal is not None
-            and wellness_signal.heart_rate is not None
-            and wellness_signal.heart_rate >= 105
-        )
-        high_distress = normalized_emotion in {"fear", "sad", "angry"} or stress_level in {
-            "high",
-            "elevated",
-        }
-
-        if normalized_emotion == "fear" or high_distress or elevated_heart_rate:
-            return (
-                "Response style: grounded and reassuring. Keep the reply short, lower the energy, "
-                "acknowledge stress, and offer one or two stabilizing next steps."
-            )
-        if normalized_emotion == "sad":
-            return (
-                "Response style: warm and gentle. Validate the feeling without sounding clinical, "
-                "then offer a small practical action or encouragement."
-            )
-        if normalized_emotion == "angry":
-            return (
-                "Response style: calm and de-escalating. Do not mirror intensity. Keep phrasing "
-                "steady, respectful, and solution-oriented."
-            )
-        if normalized_emotion in {"happy", "excited", "surprised"}:
-            return (
-                "Response style: upbeat and clear. Match the positive energy while staying concise "
-                "and helpful."
-            )
-        if normalized_emotion == "calm":
-            return (
-                "Response style: relaxed and confident. Keep the pacing smooth and the answer clean."
-            )
-        return "Response style: concise, helpful, and emotionally steady."
 
     def _extract_bedrock_text(self, response_body: dict[str, Any]) -> str:
         if "content" in response_body and response_body["content"]:
@@ -329,22 +298,63 @@ class LLMService:
         text = self._extract_bedrock_text(response_body).strip()
         return text or "I could not generate a reply."
 
+    def _generate_local(
+        self,
+        *,
+        user_message: str,
+        emotion: str,
+        persona_id: str | None,
+    ) -> str:
+        persona = get_persona_metadata(persona_id)
+        guidance = get_response_guidance(
+            str(persona.get("persona_id", persona_id or "")),
+            emotion,
+        )
+        lowered = user_message.lower()
+
+        if "time" in lowered:
+            return (
+                "I cannot check the live clock from local test mode, but the Jarvis "
+                "pipeline is working."
+            )
+        if emotion in {"fear", "sad", "angry"}:
+            return (
+                "I hear you. Let's keep this simple: name the one thing you can control "
+                "next, then take that step before widening the plan."
+            )
+        if emotion in {"happy", "excited", "surprised"}:
+            return (
+                "That's good momentum. Capture what worked, then choose one next step "
+                "while the energy is fresh."
+            )
+        if guidance:
+            return "Got it. I will keep this clear and practical: what do you want to work on next?"
+        return "Got it. What would you like to do next?"
+
     async def generate_response(
         self,
         *,
         user_message: str,
         emotion: str,
         conversation_context: list[dict[str, Any]],
+        persona_id: str | None = None,
         wellness_signal: SimulatedWellnessSignal | None = None,
     ) -> str:
         prompt = self._build_prompt(
             user_message=user_message,
             emotion=emotion,
+            persona_id=persona_id,
             conversation_context=conversation_context,
             wellness_signal=wellness_signal,
         )
         messages = [{"role": "user", "content": prompt}]
 
+        if self.settings.llm_provider == "local":
+            return self._generate_local(
+                user_message=user_message,
+                emotion=emotion,
+                persona_id=persona_id,
+            )
         if self.settings.llm_provider == "groq":
             return await self._generate_with_groq(messages)
         if self.settings.llm_provider == "bedrock":

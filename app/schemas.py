@@ -10,12 +10,14 @@ class SimulatedWellnessSignal(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: str = Field(default="default-session", min_length=1, max_length=100)
+    persona_id: str | None = "default_danny"
     message: str = Field(min_length=1)
     wellness_signal: SimulatedWellnessSignal | None = None
 
 
 class VoiceRequest(BaseModel):
     session_id: str = Field(default="default-session", min_length=1, max_length=100)
+    persona_id: str | None = "default_danny"
     transcript_override: str | None = None
     wellness_signal: SimulatedWellnessSignal | None = None
 
@@ -35,6 +37,7 @@ class EmotionDebug(BaseModel):
 
 class ChatResponse(BaseModel):
     session_id: str
+    persona_id: str = "default_danny"
     user_message: str
     assistant_message: str
     detected_emotion: str
