@@ -4,6 +4,7 @@ A FastAPI-based voice assistant starter with:
 
 - speech-to-text with Whisper
 - hybrid emotion detection from audio + transcript cues
+- persona-aware response guidance from a prebuilt corpus lookup
 - emotionally guided LLM responses with Groq or AWS Bedrock
 - ETL-style prompt templates with runtime context injection
 - browser-based conversation console
@@ -11,7 +12,7 @@ A FastAPI-based voice assistant starter with:
 - SQLAlchemy-backed conversation storage
 
 ```text
-Microphone/Text -> Python backend -> emotion detection -> LLM orchestration -> TTS -> browser playback
+Microphone/Text -> Python backend -> emotion detection -> persona guidance lookup -> LLM orchestration -> TTS -> browser playback
 ```
 
 ## What This App Does
@@ -21,6 +22,7 @@ The current app is a browser-driven Jarvis demo that supports:
 - voice turns from the browser microphone
 - text turns from the browser UI
 - emotion-aware responses
+- persona-aware response style using `persona_id + detected_emotion`
 - simulated wellness inputs for demo purposes
 - assistant audio playback when TTS is available
 - recent conversation history in the UI
@@ -50,6 +52,10 @@ Current startup behavior:
 
 ```text
 jarvis-assistant/
+├── corpus/
+│   ├── descriptors.csv
+│   ├── personas.json
+│   └── persona_guidance.json
 ├── app/
 │   ├── api.py
 │   ├── config.py
@@ -61,6 +67,7 @@ jarvis-assistant/
 │   │   ├── llm.py
 │   │   ├── memory.py
 │   │   ├── orchestrator.py
+│   │   ├── rag.py
 │   │   ├── sensevoice.py
 │   │   ├── stt.py
 │   │   └── tts.py
@@ -77,9 +84,13 @@ jarvis-assistant/
 │       ├── sad_support.wav
 │       └── remember_preference.wav
 ├── scripts/
+│   ├── build_persona_cache.py
 │   ├── generate_demo_assets.py
 │   ├── run_demo_scenarios.py
 │   └── run_full_tests.py
+├── prompts/
+│   ├── jarvis_chat.txt
+│   └── persona_composition.txt
 ├── wiki/
 │   └── Progress-Log.md
 ├── main.py
@@ -146,6 +157,15 @@ BEDROCK_REGION=us-west-2
 AWS_PROFILE_NAME=your_profile_if_needed
 ```
 
+For local smoke tests without an external LLM:
+
+```env
+LLM_PROVIDER=local
+```
+
+Local mode returns deterministic test replies. Use Groq or Bedrock for real assistant
+quality.
+
 Optional settings you may care about:
 
 - `LLM_PROMPT_TEMPLATE_PATH=prompts/jarvis_chat.txt`
@@ -170,8 +190,43 @@ The default template lives at `prompts/jarvis_chat.txt`. It uses placeholders:
 - `{{USER_MESSAGE}}` for the current user turn
 
 The context payload includes recent conversation history, detected emotion,
-emotion guidance, and any simulated wellness signal. Edit the prompt file to change Jarvis'
-behavior without touching the Python code.
+persona-specific emotion guidance, user profile metadata, and any simulated wellness
+signal. Edit the prompt file to change Jarvis' behavior without touching the Python code.
+
+## Persona Guidance Cache
+
+Jarvis uses a lightweight persona-guidance lookup before the LLM call:
+
+```text
+persona_id + detected_emotion -> response guidance
+```
+
+The source corpus lives in `corpus/`:
+
+- `descriptors.csv`: descriptor-by-emotion guidance seeded from the research grid
+- `personas.json`: six persona definitions and descriptor mixes
+- `persona_guidance.json`: generated persona-by-emotion cache used at runtime
+
+If you edit `corpus/descriptors.csv` or `corpus/personas.json`, regenerate the cache:
+
+```bash
+python3 scripts/build_persona_cache.py --force
+```
+
+Useful options:
+
+- `--persona priya_shah`: rebuild one persona row
+- `--emotion fear`: rebuild one emotion column
+- `--provider bedrock`: use `prompts/persona_composition.txt` for model-based composition
+
+The default builder uses deterministic local composition so the repo can be rebuilt
+without AWS access during demos or tests.
+
+Future expansion can add true vector RAG for larger uploaded documents:
+
+```text
+uploaded docs -> chunk -> embed -> vector DB -> retrieve top chunks -> LLM prompt
+```
 
 ## How To Start The App
 
@@ -233,6 +288,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "demo",
+    "persona_id": "default_danny",
     "message": "What time is it? Keep the answer short."
   }'
 ```
@@ -244,6 +300,7 @@ curl -X POST http://127.0.0.1:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "demo",
+    "persona_id": "priya_shah",
     "message": "I am feeling pretty stressed right now.",
     "wellness_signal": {
       "heart_rate": 108,
@@ -258,6 +315,7 @@ Voice upload with transcript override:
 ```bash
 curl -X POST http://127.0.0.1:8000/api/voice \
   -F "session_id=voice-demo" \
+  -F "persona_id=priya_shah" \
   -F "transcript_override=Please remember I like concise answers." \
   -F "wellness_heart_rate=92" \
   -F "wellness_stress_level=moderate" \
@@ -268,6 +326,12 @@ Read recent history:
 
 ```bash
 curl http://127.0.0.1:8000/api/history/demo
+```
+
+List available personas:
+
+```bash
+curl http://127.0.0.1:8000/api/personas
 ```
 
 Clear a session manually:
@@ -291,6 +355,9 @@ The main areas of the UI are:
 - recorded clip and assistant output players
 - conversation thread
 - transcript, assistant reply, emotion details, output artifact, and raw JSON panels
+
+The browser UI currently uses the default persona. API callers can pass `persona_id`
+directly to `/api/chat` or `/api/voice`.
 
 ## What To Do When Using The App
 
@@ -516,6 +583,7 @@ Current behavior:
 - real audio can go through Whisper transcription
 - `Transcript Override` bypasses STT intentionally for testing
 - hybrid emotion inference combines audio and text cues
+- persona guidance is retrieved from `corpus/persona_guidance.json`
 - simulated wellness signals can influence response style
 - recent session history is shown in the browser UI
 - assistant playback defaults to `1.25x`
@@ -529,6 +597,12 @@ Start server:
 uvicorn main:app --reload
 ```
 
+Start server in local LLM mode for offline smoke tests:
+
+```bash
+LLM_PROVIDER=local uvicorn main:app --reload
+```
+
 Compile-check a few key files:
 
 ```bash
@@ -539,6 +613,12 @@ Run the full test script:
 
 ```bash
 python3 scripts/run_full_tests.py
+```
+
+Rebuild persona guidance:
+
+```bash
+python3 scripts/build_persona_cache.py --force
 ```
 
 Generate demo assets:

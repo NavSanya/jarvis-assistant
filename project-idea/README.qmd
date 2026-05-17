@@ -14,7 +14,7 @@ Jarvis Assistant so far.
 ## One-Line Idea
 
 Jarvis is an emotion-aware voice assistant that accepts text or speech, detects the
-user's emotional state, gives the language model emotional guidance, stores recent
+user's emotional state, retrieves persona-aware response guidance, stores recent
 conversation context, and returns both a text reply and a synthesized voice artifact.
 
 ## Current Product Shape
@@ -26,6 +26,9 @@ conversation context, and returns both a text reply and a synthesized voice arti
   health checks.
 - Orchestration: `AssistantOrchestrator` coordinates transcription, emotion detection,
   memory, LLM response generation, and text-to-speech output.
+- Persona guidance: `app/services/rag.py` loads a prebuilt
+  `persona_id + detected_emotion` cache from `corpus/persona_guidance.json` before
+  prompt rendering, avoiding runtime vector search or extra LLM calls.
 - Memory: recent turns are stored as `ConversationTurn` rows with role, content,
   session id, emotion, and timestamp.
 - Database: MySQL is the primary configured database; SQLite is used as a fallback
@@ -124,8 +127,9 @@ flowchart TD
     C --> N
 
     N --> O[Load recent session history]
-    O --> P[Build prompt context payload]
-    P --> Q[LLM generates Jarvis reply]
+    O --> P[Retrieve persona + emotion guidance]
+    P --> P1[Build prompt context payload]
+    P1 --> Q[LLM generates Jarvis reply]
     Q --> R[Coqui TTS attempts voice synthesis]
     R --> S{TTS available?}
     S -->|yes| T[Save generated_audio/session-response.wav]
@@ -143,7 +147,8 @@ flowchart TD
     A[User sends text] --> B[POST /api/chat]
     B --> C[Detect emotion from text keywords]
     C --> D[Fetch up to 12 recent turns]
-    D --> E[Create context payload]
+    D --> D1[Retrieve persona guidance]
+    D1 --> E[Create context payload]
     E --> F[Render prompts/jarvis_chat.txt]
     F --> G{LLM_PROVIDER}
     G -->|bedrock - current| H[Invoke AWS Bedrock model]
@@ -190,6 +195,7 @@ contains:
 
 - `detected_emotion`
 - `emotion_guidance`
+- `user_profile`
 - recent `conversation_history`
 - optional `wellness_signal`
 
@@ -205,6 +211,7 @@ emotion-aware, supportive during distress, and careful not to invent personal fa
 | `GET /health` | Provider status for LLM, STT, emotion, TTS, and database |
 | `POST /api/chat` | Text chat turn |
 | `POST /api/voice` | Voice upload turn with optional transcript override and wellness inputs |
+| `GET /api/personas` | List available persona profiles |
 | `GET /api/history/{session_id}` | Fetch recent conversation turns |
 | `DELETE /api/history/{session_id}` | Clear a session's conversation history |
 | `WS /ws/chat` | Minimal websocket chat path using neutral emotion and no memory |

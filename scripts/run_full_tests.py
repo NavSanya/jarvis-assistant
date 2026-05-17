@@ -37,8 +37,10 @@ class TestRunner:
         self.sqlite_db = workspace / "jarvis.db"
         self.results: list[TestResult] = []
         self.health_payload: dict[str, Any] = {}
+        self.personas_payload: list[dict[str, Any]] = []
         self.chat_payload: dict[str, Any] = {}
         self.voice_payload: dict[str, Any] = {}
+        self.successful_sessions: list[str] = []
 
     def add_result(self, name: str, status: str, detail: str) -> None:
         self.results.append(TestResult(name=name, status=status, detail=detail))
@@ -47,6 +49,7 @@ class TestRunner:
         async with httpx.AsyncClient(timeout=60.0) as client:
             await self.test_root(client)
             await self.test_health(client)
+            await self.test_personas(client)
             await self.test_chat(client)
             await self.test_voice(client)
         await self.test_websocket()
@@ -65,6 +68,32 @@ class TestRunner:
                 self.add_result(name, "PASS", payload.get("message", "Root endpoint responded."))
             else:
                 self.add_result(name, "FAIL", f"Unexpected payload: {payload}")
+        except Exception as exc:
+            self.add_result(name, "FAIL", str(exc))
+
+    async def test_personas(self, client: httpx.AsyncClient) -> None:
+        name = "Personas Endpoint"
+        try:
+            response = await client.get(f"{self.base_url}/api/personas")
+            if response.status_code >= 400:
+                self.add_result(
+                    name,
+                    "FAIL",
+                    await self.response_error_detail(response, "Personas request failed."),
+                )
+                return
+
+            payload = response.json()
+            self.personas_payload = payload
+            persona_ids = {
+                str(persona.get("persona_id"))
+                for persona in payload
+                if isinstance(persona, dict)
+            }
+            if {"default_danny", "priya_shah"}.issubset(persona_ids):
+                self.add_result(name, "PASS", f"{len(payload)} persona profiles returned.")
+            else:
+                self.add_result(name, "FAIL", f"Unexpected persona payload: {payload}")
         except Exception as exc:
             self.add_result(name, "FAIL", str(exc))
 
@@ -94,16 +123,25 @@ class TestRunner:
         try:
             payload = {
                 "session_id": "test-chat-session",
+                "persona_id": "priya_shah",
                 "message": "What time is it? Keep your answer short.",
             }
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
-            response.raise_for_status()
+            if response.status_code >= 400:
+                self.add_result(
+                    name,
+                    "FAIL",
+                    await self.response_error_detail(response, "Chat request failed."),
+                )
+                return
+
             body = response.json()
             self.chat_payload = body
 
             assistant_message = body.get("assistant_message")
             audio_path = body.get("audio_path")
             if assistant_message and audio_path:
+                self.successful_sessions.append("test-chat-session")
                 self.add_result(
                     name,
                     "PASS",
@@ -126,6 +164,7 @@ class TestRunner:
                 files = {"audio": (temp_path.name, audio_file, "audio/wav")}
                 data = {
                     "session_id": "test-voice-session",
+                    "persona_id": "priya_shah",
                     "transcript_override": "Please remember I like concise answers.",
                 }
                 response = await client.post(
@@ -135,10 +174,18 @@ class TestRunner:
                 )
             temp_path.unlink(missing_ok=True)
 
-            response.raise_for_status()
+            if response.status_code >= 400:
+                self.add_result(
+                    name,
+                    "FAIL",
+                    await self.response_error_detail(response, "Voice request failed."),
+                )
+                return
+
             body = response.json()
             self.voice_payload = body
             if body.get("transcript") and body.get("assistant_message") and body.get("audio_path"):
+                self.successful_sessions.append("test-voice-session")
                 self.add_result(
                     name,
                     "PASS",
@@ -184,7 +231,15 @@ class TestRunner:
             self.add_result(name, "FAIL", f"Missing artifact(s): {', '.join(missing_paths)}")
             return
 
-        self.add_result(name, "FAIL", "No audio_path values were returned by the API.")
+        if not self.successful_sessions:
+            self.add_result(
+                name,
+                "SKIP",
+                "No chat or voice turn completed, so no output artifact was expected.",
+            )
+            return
+
+        self.add_result(name, "FAIL", "No audio_path values were returned by completed API turns.")
 
     def test_database(self) -> None:
         name = "Database Persistence"
@@ -203,17 +258,34 @@ class TestRunner:
             self.add_result(name, "FAIL", f"SQLite database not found at {self.sqlite_db}")
             return
 
+        if not self.successful_sessions:
+            self.add_result(
+                name,
+                "SKIP",
+                "No chat or voice turn completed, so no database turns were expected.",
+            )
+            return
+
         try:
             with sqlite3.connect(self.sqlite_db) as connection:
+                placeholders = ", ".join("?" for _ in self.successful_sessions)
                 cursor = connection.execute(
-                    "select count(*) from conversation_turns where session_id in (?, ?)",
-                    ("test-chat-session", "test-voice-session"),
+                    (
+                        "select count(*) from conversation_turns "
+                        f"where session_id in ({placeholders})"
+                    ),
+                    tuple(self.successful_sessions),
                 )
                 row_count = cursor.fetchone()[0]
-            if row_count >= 2:
+            expected_turns = len(self.successful_sessions) * 2
+            if row_count >= expected_turns:
                 self.add_result(name, "PASS", f"Found {row_count} stored conversation turns.")
             else:
-                self.add_result(name, "FAIL", f"Expected stored turns, found {row_count}.")
+                self.add_result(
+                    name,
+                    "FAIL",
+                    f"Expected at least {expected_turns} stored turns, found {row_count}.",
+                )
         except Exception as exc:
             self.add_result(name, "FAIL", str(exc))
 
@@ -240,6 +312,26 @@ class TestRunner:
             wav_file.setsampwidth(2)
             wav_file.setframerate(16000)
             wav_file.writeframes(b"\x00\x00" * 16000)
+
+    @staticmethod
+    async def response_error_detail(
+        response: httpx.Response,
+        fallback_message: str,
+    ) -> str:
+        raw_text = await response.aread()
+        try:
+            payload = json.loads(raw_text.decode("utf-8"))
+        except Exception:
+            payload = {"detail": raw_text.decode("utf-8", errors="replace")}
+
+        message_parts = [
+            str(payload.get("detail") or fallback_message),
+            str(payload.get("message") or "").strip(),
+        ]
+        provider = payload.get("provider")
+        if provider:
+            message_parts.append(f"provider={provider}")
+        return " | ".join(part for part in message_parts if part)
 
 
 def parse_args() -> argparse.Namespace:
