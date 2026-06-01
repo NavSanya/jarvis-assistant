@@ -5,7 +5,11 @@ from typing import Any
 
 from app.config import Settings
 from app.schemas import SimulatedWellnessSignal
-from app.services.rag import get_persona_metadata, get_response_guidance
+from app.services.rag import (
+    get_descriptor_guidance,
+    get_persona_metadata,
+    get_response_guidance,
+)
 
 try:
     from groq import APIConnectionError as GroqAPIConnectionError
@@ -50,7 +54,9 @@ class LLMRateLimitError(LLMServiceError):
 
 DEFAULT_PROMPT_TEMPLATE = """You are Jarvis, a calm and concise AI voice assistant.
 
-Use the context payload when it is relevant. Adapt your tone using the emotion guidance.
+Use the context payload when it is relevant. Treat corpus_context.response_contract
+as mandatory. Make the selected persona visibly different in structure, pacing,
+word choice, and emotional warmth while still speaking as Jarvis.
 Be supportive without making medical or mental health diagnoses.
 
 Context:
@@ -128,16 +134,28 @@ class LLMService:
         wellness_signal: SimulatedWellnessSignal | None,
     ) -> dict[str, Any]:
         persona = get_persona_metadata(persona_id)
+        resolved_persona_id = str(persona.get("persona_id", persona_id or ""))
         guidance = get_response_guidance(
-            str(persona.get("persona_id", persona_id or "")),
+            resolved_persona_id,
             emotion,
         )
+        descriptor_guidance = get_descriptor_guidance(resolved_persona_id, emotion)
+        response_contract = persona.get("response_contract", {})
         return {
             "user_text": user_message,
             "emotion": emotion,
             "detected_emotion": emotion,
             "emotion_guidance": guidance,
             "user_profile": persona,
+            "corpus_context": {
+                "selected_persona_id": resolved_persona_id,
+                "response_contract": response_contract,
+                "persona_guidance": guidance,
+                "descriptor_guidance": descriptor_guidance,
+                "persona_source": "corpus/personas.json",
+                "persona_guidance_source": "corpus/persona_guidance.json",
+                "descriptor_guidance_source": "corpus/descriptors.csv",
+            },
             "conversation_history": conversation_context,
             "wellness_signal": wellness_signal.model_dump() if wellness_signal else None,
         }
@@ -310,6 +328,7 @@ class LLMService:
             str(persona.get("persona_id", persona_id or "")),
             emotion,
         )
+        resolved_persona_id = str(persona.get("persona_id", persona_id or ""))
         lowered = user_message.lower()
 
         if "time" in lowered:
@@ -317,10 +336,35 @@ class LLMService:
                 "I cannot check the live clock from local test mode, but the Jarvis "
                 "pipeline is working."
             )
+        persona_responses = {
+            "tony_stark": (
+                "Lever first: pick the constraint that is actually blocking you. "
+                "Then choose one move, run it for 15 minutes, and keep the drama budget at zero."
+            ),
+            "maya_chen": (
+                "That sounds like a lot to hold. It may help to write down what is real, "
+                "what is a fear, and one gentle next step you can take."
+            ),
+            "uncle_ray": (
+                "Alright, call it what it is: too many moving parts. Pick the one thing "
+                "that matters most today and handle that before you widen the circle."
+            ),
+            "sam_rivera": (
+                "It makes sense that this feels tangled. Try naming the pressure, then "
+                "choose one small step that gives you a little room to breathe."
+            ),
+            "priya_shah": (
+                "This is pressure, not a personal failure. Rank the top three tasks, "
+                "start a 25-minute timer on number one, and stop there for now."
+            ),
+        }
         if emotion in {"fear", "sad", "angry"}:
-            return (
-                "I hear you. Let's keep this simple: name the one thing you can control "
-                "next, then take that step before widening the plan."
+            return persona_responses.get(
+                resolved_persona_id,
+                (
+                    "I hear you. Let's keep this simple: name the one thing you can "
+                    "control next, then take that step before widening the plan."
+                ),
             )
         if emotion in {"happy", "excited", "surprised"}:
             return (

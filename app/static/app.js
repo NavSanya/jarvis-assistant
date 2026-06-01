@@ -2,6 +2,9 @@ const recordButton = document.getElementById("recordButton");
 const stopButton = document.getElementById("stopButton");
 const sendTextButton = document.getElementById("sendTextButton");
 const clearConversationButton = document.getElementById("clearConversationButton");
+const personaSelect = document.getElementById("personaSelect");
+const personaName = document.getElementById("personaName");
+const personaTone = document.getElementById("personaTone");
 const sessionIdInput = document.getElementById("sessionId");
 const transcriptOverrideInput = document.getElementById("transcriptOverride");
 const wellnessHeartRateInput = document.getElementById("wellnessHeartRate");
@@ -30,6 +33,7 @@ let audioContext = null;
 let wakeRecognition = null;
 let wakeListeningActive = false;
 let shouldWakeListen = true;
+let personas = [];
 
 const WAKE_PHRASE = "hey jayjay";
 
@@ -65,6 +69,10 @@ const EMOTION_UI = {
   angry: {
     label: "Angry",
     summary: "Shifting to a hotter alert state with stronger contrast and motion.",
+  },
+  disgust: {
+    label: "Disgust",
+    summary: "Sharpening the signal for aversion or strong rejection cues.",
   },
 };
 
@@ -152,6 +160,10 @@ function setStatus(message) {
   statusEl.textContent = message;
 }
 
+function selectedPersonaId() {
+  return personaSelect.value || "default_danny";
+}
+
 function setBusy(isBusy) {
   recordButton.disabled = isBusy || mediaRecorder !== null;
   stopButton.disabled = mediaRecorder === null;
@@ -174,6 +186,52 @@ function scrollHistoryToLatest() {
     top: historyList.scrollHeight,
     behavior: "smooth",
   });
+}
+
+function renderPersonaDetails() {
+  const persona = personas.find((item) => item.persona_id === selectedPersonaId());
+  if (!persona) {
+    personaName.textContent = "Default Danny - The Steady Default";
+    personaTone.textContent = "Warm, clear, grounded, and practical.";
+    return;
+  }
+
+  personaName.textContent = persona.display_name || persona.persona_id;
+  const contractVoice = persona.response_contract?.voice;
+  personaTone.textContent = [persona.tone_overlay, contractVoice]
+    .filter(Boolean)
+    .join(" ");
+}
+
+async function loadPersonas() {
+  try {
+    const response = await fetch("/api/personas");
+    const { ok, payload } = await parseResponse(response);
+    if (!ok || !Array.isArray(payload)) {
+      throw new Error(buildErrorMessage(payload, "Persona request failed."));
+    }
+
+    personas = payload;
+    const previousSelection = selectedPersonaId();
+    personaSelect.innerHTML = "";
+
+    personas.forEach((persona) => {
+      const option = document.createElement("option");
+      option.value = persona.persona_id;
+      option.textContent = persona.display_name || persona.persona_id;
+      personaSelect.appendChild(option);
+    });
+
+    if (personas.some((persona) => persona.persona_id === previousSelection)) {
+      personaSelect.value = previousSelection;
+    } else if (personas.some((persona) => persona.persona_id === "priya_shah")) {
+      personaSelect.value = "priya_shah";
+    }
+
+    renderPersonaDetails();
+  } catch (error) {
+    personaTone.textContent = `Persona list unavailable: ${error.message}`;
+  }
 }
 
 function createWakeRecognition() {
@@ -301,7 +359,10 @@ function renderResponse(payload) {
   applyEmotionTheme(payload.detected_emotion);
 
   if (payload.audio_path && payload.audio_path.endsWith(".wav")) {
-    assistantAudio.src = `/${payload.audio_path}`;
+    const cacheToken = encodeURIComponent(String(Date.now()));
+    assistantAudio.pause();
+    assistantAudio.src = `/${payload.audio_path}?turn=${cacheToken}`;
+    assistantAudio.load();
     applyPlaybackRate();
     assistantAudio.play().catch(() => {});
     audioHint.textContent = `Playback ready from ${payload.audio_path}`;
@@ -410,6 +471,7 @@ async function postTextMessage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         session_id: sessionIdInput.value.trim() || "browser-demo",
+        persona_id: selectedPersonaId(),
         message,
         wellness_signal: wellnessSignal,
       }),
@@ -517,6 +579,7 @@ async function sendVoice(blob) {
   const formData = new FormData();
   const wellnessSignal = getWellnessSignal();
   formData.append("session_id", sessionIdInput.value.trim() || "browser-demo");
+  formData.append("persona_id", selectedPersonaId());
   formData.append("audio", blob, "browser-recording.webm");
 
   const transcriptOverride = transcriptOverrideInput.value.trim();
@@ -560,6 +623,7 @@ sendTextButton.addEventListener("click", postTextMessage);
 clearConversationButton.addEventListener("click", clearConversation);
 refreshHistoryButton.addEventListener("click", loadHistory);
 playbackSpeedSelect.addEventListener("change", applyPlaybackRate);
+personaSelect.addEventListener("change", renderPersonaDetails);
 textMessageInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -573,6 +637,7 @@ sessionIdInput.addEventListener("blur", loadHistory);
 
 applyPlaybackRate();
 applyEmotionTheme("neutral");
+loadPersonas();
 loadHistory();
 window.setTimeout(() => {
   startWakeListening();

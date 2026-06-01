@@ -169,11 +169,38 @@ h1 {
 }
 
 .field-row,
+.persona-strip,
 .button-row,
 .media,
 .results {
   display: grid;
   gap: 16px;
+}
+
+.persona-strip {
+  grid-template-columns: minmax(240px, 0.9fr) minmax(280px, 1.1fr);
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.persona-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(8, 17, 31, 0.56);
+  padding: 14px 16px;
+  min-height: 82px;
+}
+
+.persona-card p {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.9rem;
+}
+
+.persona-card span {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .field-row {
@@ -415,6 +442,15 @@ body[data-emotion="angry"] {
   --wave-height: 52px;
 }
 
+body[data-emotion="disgust"] {
+  --accent: #b8f26d;
+  --accent-2: #68d391;
+  --core: #d7ff9a;
+  --glow: rgba(104, 211, 145, 0.45);
+  --wave-speed: 1s;
+  --wave-height: 44px;
+}
+
 @keyframes ringPulse {
   0%,
   100% {
@@ -457,6 +493,10 @@ body[data-emotion="angry"] {
   }
 
   .mood-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .persona-strip {
     grid-template-columns: 1fr;
   }
 
