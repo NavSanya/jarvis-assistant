@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Orbitron:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260422-wellness-demo" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260524-persona-contracts" />
   </head>
   <body>
     <main class="shell">
@@ -51,6 +51,19 @@
       </section>
 
       <section class="panel controls">
+        <div class="persona-strip">
+          <label class="field persona-field">
+            <span>Persona</span>
+            <select id="personaSelect">
+              <option value="default_danny">Default Danny - The Steady Default</option>
+            </select>
+          </label>
+          <div class="persona-card">
+            <p id="personaName">Default Danny - The Steady Default</p>
+            <span id="personaTone">Warm, clear, grounded, and practical.</span>
+          </div>
+        </div>
+
         <div class="field-row">
           <label class="field">
             <span>Session ID</span>
@@ -172,6 +185,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260422-wellness-demo"></script>
+    <script src="/static/app.js?v=20260524-persona-contracts"></script>
   </body>
   </html>

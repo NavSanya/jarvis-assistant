@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import os
 from pathlib import Path
+from uuid import uuid4
 
 from app.config import Settings
 
@@ -72,14 +73,14 @@ class TextToSpeechService:
     def _synthesize_sync(self, session_id: str, text: str) -> str:
         tts_model = self._load_model()
         safe_name = session_id.replace("/", "-")
-        target = self.output_dir / f"{safe_name}-response.wav"
+        target = self.output_dir / f"{safe_name}-response-{uuid4().hex}.wav"
         tts_model.tts_to_file(text=text, file_path=str(target))
         return str(target)
 
     async def synthesize(self, session_id: str, text: str) -> str:
         if self._get_tts_class() is None:
             safe_name = session_id.replace("/", "-")
-            target = self.output_dir / f"{safe_name}-response.txt"
+            target = self.output_dir / f"{safe_name}-response-{uuid4().hex}.txt"
             target.write_text(text, encoding="utf-8")
             return str(target)
         return await asyncio.to_thread(self._synthesize_sync, session_id, text)
