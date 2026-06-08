@@ -322,6 +322,7 @@ class LLMService:
         user_message: str,
         emotion: str,
         persona_id: str | None,
+        wellness_signal: SimulatedWellnessSignal | None,
     ) -> str:
         persona = get_persona_metadata(persona_id)
         guidance = get_response_guidance(
@@ -335,6 +336,30 @@ class LLMService:
             return (
                 "I cannot check the live clock from local test mode, but the Jarvis "
                 "pipeline is working."
+            )
+        if wellness_signal and (
+            wellness_signal.stress_level == "high"
+            or (wellness_signal.heart_rate is not None and wellness_signal.heart_rate >= 105)
+            or (
+                wellness_signal.hrv_rmssd_ms is not None
+                and wellness_signal.hrv_rmssd_ms <= 32
+            )
+        ):
+            return (
+                "Your wearable sample is showing higher activation, so let's keep this "
+                "grounded. Pick one next step, make it small, and give yourself a short "
+                "reset before widening the plan."
+            )
+        if wellness_signal and (
+            wellness_signal.stress_level == "low"
+            and wellness_signal.heart_rate is not None
+            and wellness_signal.heart_rate <= 78
+            and wellness_signal.hrv_rmssd_ms is not None
+            and wellness_signal.hrv_rmssd_ms >= 50
+        ):
+            return (
+                "The wearable sample looks steady. Keep the momentum simple: choose one "
+                "thing to handle next and stay with it for a few focused minutes."
             )
         persona_responses = {
             "tony_stark": (
@@ -398,6 +423,7 @@ class LLMService:
                 user_message=user_message,
                 emotion=emotion,
                 persona_id=persona_id,
+                wellness_signal=wellness_signal,
             )
         if self.settings.llm_provider == "groq":
             return await self._generate_with_groq(messages)

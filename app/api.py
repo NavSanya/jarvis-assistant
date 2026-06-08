@@ -18,11 +18,13 @@ from app.schemas import (
     ConversationTurnOut,
     HealthResponse,
     SimulatedWellnessSignal,
+    WellnessSampleOut,
 )
 from app.services.llm import LLMService, LLMServiceError
 from app.services.memory import MemoryService
 from app.services.orchestrator import AssistantOrchestrator
 from app.services.rag import DEFAULT_PERSONA, list_personas
+from app.services.wellness import load_wellness_samples
 
 settings = get_settings()
 llm_service = LLMService(settings)
@@ -124,6 +126,14 @@ def create_app() -> FastAPI:
         return list_personas()
 
     @app.get(
+        f"{settings.api_prefix}/wellness-samples",
+        response_model=list[WellnessSampleOut],
+        tags=["wellness"],
+    )
+    async def wellness_samples() -> list[WellnessSampleOut]:
+        return load_wellness_samples()
+
+    @app.get(
         f"{settings.api_prefix}/history/{{session_id}}",
         response_model=ConversationHistoryResponse,
         tags=["chat"],
@@ -167,8 +177,12 @@ def create_app() -> FastAPI:
         session_id: str = Form(...),
         persona_id: str | None = Form(default=DEFAULT_PERSONA),
         transcript_override: str | None = Form(default=None),
+        wellness_timestamp: str | None = Form(default=None),
         wellness_heart_rate: int | None = Form(default=None),
+        wellness_hrv_rmssd_ms: int | None = Form(default=None),
+        wellness_skin_temperature_c: float | None = Form(default=None),
         wellness_stress_level: str | None = Form(default=None),
+        wellness_source: str | None = Form(default=None),
         audio: UploadFile = File(...),
         db: AsyncSession = Depends(get_db_session),
     ) -> ChatResponse:
@@ -177,10 +191,23 @@ def create_app() -> FastAPI:
         target = uploads_dir / f"{uuid4()}-{audio.filename}"
         target.write_bytes(await audio.read())
         wellness_signal = None
-        if wellness_heart_rate is not None or wellness_stress_level:
+        if any(
+            value is not None
+            for value in (
+                wellness_timestamp,
+                wellness_heart_rate,
+                wellness_hrv_rmssd_ms,
+                wellness_skin_temperature_c,
+                wellness_stress_level,
+            )
+        ):
             wellness_signal = SimulatedWellnessSignal(
+                timestamp=wellness_timestamp,
                 heart_rate=wellness_heart_rate,
+                hrv_rmssd_ms=wellness_hrv_rmssd_ms,
+                skin_temperature_c=wellness_skin_temperature_c,
                 stress_level=wellness_stress_level,
+                source=wellness_source or "manual_demo",
             )
 
         return await orchestrator.handle_voice(

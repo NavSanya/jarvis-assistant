@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Orbitron:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260524-persona-contracts" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260608-audio-upload" />
   </head>
   <body>
     <main class="shell">
@@ -79,8 +79,14 @@
         </div>
 
         <div class="field-row wellness-row">
+          <label class="field wellness-sample-field">
+            <span>Wearable Sample</span>
+            <select id="wellnessSampleSelect">
+              <option value="">Manual values</option>
+            </select>
+          </label>
           <label class="field">
-            <span>Simulated Heart Rate</span>
+            <span>Heart Rate</span>
             <input
               id="wellnessHeartRate"
               type="number"
@@ -90,7 +96,28 @@
             />
           </label>
           <label class="field">
-            <span>Simulated Stress Level</span>
+            <span>HRV RMSSD</span>
+            <input
+              id="wellnessHrv"
+              type="number"
+              min="0"
+              max="300"
+              value="55"
+            />
+          </label>
+          <label class="field">
+            <span>Skin Temp C</span>
+            <input
+              id="wellnessSkinTemperature"
+              type="number"
+              min="30"
+              max="45"
+              step="0.1"
+              value="36.6"
+            />
+          </label>
+          <label class="field">
+            <span>Stress Level</span>
             <select id="wellnessStressLevel">
               <option value="">Off</option>
               <option value="low">Low</option>
@@ -114,6 +141,11 @@
           <button id="sendTextButton">Send Text Turn</button>
           <button id="clearConversationButton">New Conversation</button>
         </div>
+
+        <label class="field audio-upload-field">
+          <span>Upload Audio Turn</span>
+          <input id="audioUpload" type="file" accept="audio/*" />
+        </label>
 
         <label class="field">
           <span>Text Message</span>
@@ -185,6 +217,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260524-persona-contracts"></script>
+    <script src="/static/app.js?v=20260608-audio-upload"></script>
   </body>
   </html>

@@ -1,11 +1,52 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class SimulatedWellnessSignal(BaseModel):
-    heart_rate: int | None = Field(default=None, ge=40, le=180)
+    timestamp: datetime | None = None
+    heart_rate: int | None = Field(
+        default=None,
+        ge=40,
+        le=180,
+        validation_alias=AliasChoices("heart_rate", "heart_rate_bpm"),
+    )
+    hrv_rmssd_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=300,
+        validation_alias=AliasChoices(
+            "hrv_rmssd_ms",
+            "heart_rate_variability_ms",
+            "hrv_ms",
+        ),
+    )
+    skin_temperature_c: float | None = Field(
+        default=None,
+        ge=30,
+        le=45,
+        validation_alias=AliasChoices(
+            "skin_temperature_c",
+            "skin_temperature_C",
+            "skin_temperature",
+        ),
+    )
     stress_level: str | None = None
     source: str = "manual_demo"
+
+    @field_validator("stress_level", mode="before")
+    @classmethod
+    def normalize_stress_level(cls, value: str | None):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower()
+        return normalized or None
+
+
+class WellnessSampleOut(SimulatedWellnessSignal):
+    suggested_emotion: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -28,6 +69,8 @@ class EmotionDebug(BaseModel):
     audio_score: float | None = None
     text_emotion: str | None = None
     text_score: float | None = None
+    wellness_emotion: str | None = None
+    wellness_score: float | None = None
     decision_source: str
     provider: str | None = None
     language: str | None = None

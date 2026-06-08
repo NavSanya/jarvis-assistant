@@ -212,9 +212,18 @@ h1 {
   background: rgba(15, 29, 46, 0.88);
 }
 
+.wellness-sample-field {
+  grid-column: 1 / -1;
+}
+
 .button-row {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin: 18px 0;
+}
+
+.audio-upload-field {
+  max-width: 520px;
+  margin-bottom: 18px;
 }
 
 .field {
@@ -255,6 +264,41 @@ select {
   font: inherit;
   color: var(--ink);
   background: rgba(8, 17, 31, 0.72);
+}
+
+input[type="file"] {
+  cursor: pointer;
+  padding: 11px 14px;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 14px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #07111f;
+  background: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+input[type="file"]::-webkit-file-upload-button {
+  margin-right: 14px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #07111f;
+  background: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+input[type="file"]:disabled,
+input[type="file"]:disabled::file-selector-button,
+input[type="file"]:disabled::-webkit-file-upload-button {
+  cursor: not-allowed;
 }
 
 textarea {

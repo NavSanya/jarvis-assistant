@@ -1,7 +1,11 @@
 import asyncio
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 from app.config import Settings
+from app.schemas import SimulatedWellnessSignal
 
 try:
     from transformers import pipeline
@@ -97,13 +101,61 @@ class EmotionService:
         }
         return mapping.get(lowered, lowered)
 
+    @staticmethod
+    def _convert_to_classifier_wav(audio_path: Path) -> Path:
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            return audio_path
+
+        temp_file = tempfile.NamedTemporaryFile(
+            delete=False,
+            prefix="jarvis-emotion-",
+            suffix=".wav",
+        )
+        converted_path = Path(temp_file.name)
+        temp_file.close()
+
+        try:
+            subprocess.run(
+                [
+                    ffmpeg_path,
+                    "-y",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(audio_path),
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "16000",
+                    str(converted_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            converted_path.unlink(missing_ok=True)
+            return audio_path
+
+        return converted_path
+
     def _classify_sync(self, audio_path: Path) -> tuple[str, float]:
         classifier = self._load_classifier()
-        results = classifier(str(audio_path), top_k=3)
-        if not results:
-            return ("neutral", 0.0)
-        top = results[0]
-        return (self._normalize_label(str(top["label"])), float(top.get("score", 0.0)))
+        classifier_audio_path = self._convert_to_classifier_wav(audio_path)
+
+        try:
+            results = classifier(str(classifier_audio_path), top_k=3)
+            if not results:
+                return ("neutral", 0.0)
+            top = results[0]
+            return (
+                self._normalize_label(str(top["label"])),
+                float(top.get("score", 0.0)),
+            )
+        finally:
+            if classifier_audio_path != audio_path:
+                classifier_audio_path.unlink(missing_ok=True)
 
     def _detect_from_text(self, transcript: str) -> tuple[str, float]:
         lowered = transcript.lower()
@@ -135,6 +187,47 @@ class EmotionService:
             "text_score": round(text_score, 3),
             "decision_source": decision_source,
         }
+
+    def detect_from_wellness(
+        self,
+        wellness_signal: SimulatedWellnessSignal | None,
+    ) -> tuple[str, float]:
+        if wellness_signal is None:
+            return ("neutral", 0.0)
+
+        stress_level = (wellness_signal.stress_level or "").lower()
+        heart_rate = wellness_signal.heart_rate
+        hrv = wellness_signal.hrv_rmssd_ms
+
+        stress_points = 0
+        calm_points = 0
+
+        if stress_level == "high":
+            stress_points += 3
+        elif stress_level == "moderate":
+            stress_points += 1
+        elif stress_level == "low":
+            calm_points += 2
+
+        if heart_rate is not None:
+            if heart_rate >= 105:
+                stress_points += 2
+            elif heart_rate <= 78:
+                calm_points += 1
+
+        if hrv is not None:
+            if hrv <= 32:
+                stress_points += 2
+            elif hrv >= 50:
+                calm_points += 1
+
+        if stress_points >= 3:
+            return ("fear", min(0.9, 0.42 + (stress_points * 0.1)))
+        if calm_points >= 3 and stress_points == 0:
+            return ("calm", min(0.78, 0.36 + (calm_points * 0.1)))
+        if stress_points > 0:
+            return ("neutral", min(0.48, 0.24 + (stress_points * 0.08)))
+        return ("neutral", 0.0)
 
     async def detect_from_audio(self, audio_path: Path) -> tuple[str, float]:
         if pipeline is None:

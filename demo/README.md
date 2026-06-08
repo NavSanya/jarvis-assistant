@@ -5,7 +5,8 @@ This folder contains reusable demo scenarios for Jarvis.
 ## What Is Included
 
 - `audio/` generated `.wav` clips for upload-based demos
-- `scenarios.json` with transcript override text, heart rate, and stress level
+- `scenarios.json` with transcript override text and wearable-style signals
+- `wellness_signals.csv` with sample rows for the browser sample picker
 - `DOWNLOAD_CHECKLIST.md` with recommended real audio sources and filenames
 
 The clips are synthetic tones, not spoken recordings. They are meant to be used with
@@ -48,5 +49,5 @@ After `remember_preference`, send a normal follow-up prompt in the UI like:
 ## UI Demo Tips
 
 - Use the same `Session ID` while showing a multi-turn flow.
-- Match the UI's `Simulated Heart Rate` and `Simulated Stress Level` controls to the scenario.
+- Match the UI's wellness controls to the scenario, or pick a bundled wearable sample.
 - For a browser-only demo, you can copy the scenario transcript into `Transcript Override` and use `Start Voice Turn` with any short recording.

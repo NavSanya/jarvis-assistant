@@ -35,6 +35,52 @@ class AssistantOrchestrator:
             return self.sensevoice_service.provider_status
         return self.emotion_service.provider_status
 
+    def _apply_wellness_emotion_hint(
+        self,
+        *,
+        detected_emotion: str,
+        emotion_debug: EmotionDebug | None,
+        wellness_signal: SimulatedWellnessSignal | None,
+    ) -> tuple[str, EmotionDebug | None]:
+        wellness_emotion, wellness_score = self.emotion_service.detect_from_wellness(
+            wellness_signal
+        )
+        if wellness_score == 0.0:
+            return (detected_emotion, emotion_debug)
+
+        base_debug = emotion_debug or EmotionDebug(
+            final_emotion=detected_emotion,
+            text_emotion=detected_emotion,
+            text_score=0.0,
+            decision_source="fallback",
+        )
+        base_debug.wellness_emotion = wellness_emotion
+        base_debug.wellness_score = round(wellness_score, 3)
+
+        text_score = base_debug.text_score or 0.0
+        audio_score = base_debug.audio_score or 0.0
+        has_stronger_language_signal = max(text_score, audio_score) >= 0.55
+        if (
+            detected_emotion in {"neutral", "calm"}
+            and wellness_emotion != "neutral"
+            and wellness_score >= 0.55
+            and not has_stronger_language_signal
+        ):
+            base_debug.final_emotion = wellness_emotion
+            base_debug.decision_source = "wellness_signal"
+            return (wellness_emotion, base_debug)
+
+        if (
+            detected_emotion == "neutral"
+            and wellness_emotion == "calm"
+            and wellness_score >= 0.55
+        ):
+            base_debug.final_emotion = "calm"
+            base_debug.decision_source = "wellness_signal"
+            return ("calm", base_debug)
+
+        return (detected_emotion, base_debug)
+
     async def handle_chat(
         self,
         *,
@@ -56,6 +102,12 @@ class AssistantOrchestrator:
                 emotion_debug = EmotionDebug(**text_emotion_result)
             except Exception:
                 detected_emotion = "neutral"
+
+        detected_emotion, emotion_debug = self._apply_wellness_emotion_hint(
+            detected_emotion=detected_emotion,
+            emotion_debug=emotion_debug,
+            wellness_signal=wellness_signal,
+        )
 
         history = await self.memory_service.get_recent_turns(
             db, session_id=session_id, limit=12

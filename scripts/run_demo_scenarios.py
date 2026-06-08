@@ -54,6 +54,10 @@ def post_voice(base_url: str, scenario: dict) -> dict:
 
     if scenario.get("heart_rate"):
         fields["wellness_heart_rate"] = str(scenario["heart_rate"])
+    if scenario.get("hrv_rmssd_ms"):
+        fields["wellness_hrv_rmssd_ms"] = str(scenario["hrv_rmssd_ms"])
+    if scenario.get("skin_temperature_c"):
+        fields["wellness_skin_temperature_c"] = str(scenario["skin_temperature_c"])
     if scenario.get("stress_level"):
         fields["wellness_stress_level"] = str(scenario["stress_level"])
 
@@ -97,6 +101,8 @@ def main() -> int:
     for scenario in selected:
         print(f"\n=== {scenario['label']} ({scenario['id']}) ===")
         print(f"Heart rate: {scenario['heart_rate']}")
+        print(f"HRV RMSSD: {scenario.get('hrv_rmssd_ms', 'off')}")
+        print(f"Skin temp C: {scenario.get('skin_temperature_c', 'off')}")
         print(f"Stress level: {scenario['stress_level'] or 'off'}")
         print(f"Transcript: {scenario['transcript_override']}")
         try:

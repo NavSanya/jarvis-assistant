@@ -1,5 +1,6 @@
 const recordButton = document.getElementById("recordButton");
 const stopButton = document.getElementById("stopButton");
+const audioUploadInput = document.getElementById("audioUpload");
 const sendTextButton = document.getElementById("sendTextButton");
 const clearConversationButton = document.getElementById("clearConversationButton");
 const personaSelect = document.getElementById("personaSelect");
@@ -7,7 +8,10 @@ const personaName = document.getElementById("personaName");
 const personaTone = document.getElementById("personaTone");
 const sessionIdInput = document.getElementById("sessionId");
 const transcriptOverrideInput = document.getElementById("transcriptOverride");
+const wellnessSampleSelect = document.getElementById("wellnessSampleSelect");
 const wellnessHeartRateInput = document.getElementById("wellnessHeartRate");
+const wellnessHrvInput = document.getElementById("wellnessHrv");
+const wellnessSkinTemperatureInput = document.getElementById("wellnessSkinTemperature");
 const wellnessStressLevelSelect = document.getElementById("wellnessStressLevel");
 const textMessageInput = document.getElementById("textMessage");
 const statusEl = document.getElementById("status");
@@ -29,11 +33,13 @@ const moodCore = document.getElementById("moodCore");
 let mediaRecorder = null;
 let mediaStream = null;
 let recordedChunks = [];
+let recordingPreviewUrl = null;
 let audioContext = null;
 let wakeRecognition = null;
 let wakeListeningActive = false;
 let shouldWakeListen = true;
 let personas = [];
+let wellnessSamples = [];
 
 const WAKE_PHRASE = "hey jayjay";
 
@@ -80,19 +86,50 @@ function applyPlaybackRate() {
   assistantAudio.playbackRate = Number(playbackSpeedSelect.value || "1.25");
 }
 
-function getWellnessSignal() {
-  const heartRateRaw = wellnessHeartRateInput.value.trim();
-  const stressLevel = wellnessStressLevelSelect.value.trim();
-  const heartRate = heartRateRaw ? Number.parseInt(heartRateRaw, 10) : null;
+function parseOptionalInt(value) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
-  if (!heartRate && !stressLevel) {
+function parseOptionalFloat(value) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseFloat(normalized);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function selectedWellnessSample() {
+  const selectedIndex = wellnessSampleSelect.value;
+  if (selectedIndex === "") {
+    return null;
+  }
+  return wellnessSamples[Number.parseInt(selectedIndex, 10)] || null;
+}
+
+function getWellnessSignal() {
+  const sample = selectedWellnessSample();
+  const stressLevel = wellnessStressLevelSelect.value.trim();
+  const heartRate = parseOptionalInt(wellnessHeartRateInput.value);
+  const hrv = parseOptionalInt(wellnessHrvInput.value);
+  const skinTemperature = parseOptionalFloat(wellnessSkinTemperatureInput.value);
+
+  if (!heartRate && !hrv && !skinTemperature && !stressLevel && !sample) {
     return null;
   }
 
   return {
-    heart_rate: Number.isNaN(heartRate) ? null : heartRate,
+    timestamp: sample?.timestamp || null,
+    heart_rate: heartRate,
+    hrv_rmssd_ms: hrv,
+    skin_temperature_c: skinTemperature,
     stress_level: stressLevel || null,
-    source: "manual_demo",
+    source: sample?.source || "manual_demo",
   };
 }
 
@@ -165,10 +202,22 @@ function selectedPersonaId() {
 }
 
 function setBusy(isBusy) {
-  recordButton.disabled = isBusy || mediaRecorder !== null;
-  stopButton.disabled = mediaRecorder === null;
+  const isRecording = mediaRecorder !== null;
+  recordButton.disabled = isBusy || isRecording;
+  stopButton.disabled = isBusy || !isRecording;
+  audioUploadInput.disabled = isBusy || isRecording;
   sendTextButton.disabled = isBusy;
-  clearConversationButton.disabled = isBusy || mediaRecorder !== null;
+  clearConversationButton.disabled = isBusy || isRecording;
+}
+
+function setRecordingPreview(audioSource) {
+  if (recordingPreviewUrl) {
+    URL.revokeObjectURL(recordingPreviewUrl);
+  }
+
+  recordingPreviewUrl = URL.createObjectURL(audioSource);
+  recordingPreview.src = recordingPreviewUrl;
+  recordingPreview.load();
 }
 
 function applyEmotionTheme(emotion) {
@@ -231,6 +280,55 @@ async function loadPersonas() {
     renderPersonaDetails();
   } catch (error) {
     personaTone.textContent = `Persona list unavailable: ${error.message}`;
+  }
+}
+
+function renderWellnessSampleOptions() {
+  wellnessSampleSelect.innerHTML = '<option value="">Manual values</option>';
+
+  wellnessSamples.forEach((sample, index) => {
+    const option = document.createElement("option");
+    const timestamp = sample.timestamp ? sample.timestamp.replace("T", " ").slice(0, 16) : "untimed";
+    const stressLevel = sample.stress_level || "off";
+    const emotionLabel = sample.suggested_emotion || "unlabeled";
+    option.value = String(index);
+    option.textContent = `${timestamp} - ${stressLevel} - label: ${emotionLabel}`;
+    wellnessSampleSelect.appendChild(option);
+  });
+}
+
+function applySelectedWellnessSample() {
+  const sample = selectedWellnessSample();
+  if (!sample) {
+    return;
+  }
+
+  wellnessHeartRateInput.value = sample.heart_rate ?? "";
+  wellnessHrvInput.value = sample.hrv_rmssd_ms ?? "";
+  wellnessSkinTemperatureInput.value = sample.skin_temperature_c ?? "";
+  wellnessStressLevelSelect.value = sample.stress_level || "";
+}
+
+function markWellnessManual() {
+  wellnessSampleSelect.value = "";
+}
+
+async function loadWellnessSamples() {
+  try {
+    const response = await fetch("/api/wellness-samples");
+    const { ok, payload } = await parseResponse(response);
+    if (!ok || !Array.isArray(payload)) {
+      throw new Error(buildErrorMessage(payload, "Wellness sample request failed."));
+    }
+
+    wellnessSamples = payload;
+    renderWellnessSampleOptions();
+  } catch (error) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = `Samples unavailable: ${error.message}`;
+    wellnessSampleSelect.innerHTML = "";
+    wellnessSampleSelect.appendChild(option);
   }
 }
 
@@ -540,7 +638,8 @@ async function startRecording() {
 
     mediaRecorder.addEventListener("stop", async () => {
       const blob = new Blob(recordedChunks, { type: "audio/webm" });
-      recordingPreview.src = URL.createObjectURL(blob);
+      setRecordingPreview(blob);
+      setBusy(true);
       await sendVoice(blob);
       mediaStream.getTracks().forEach((track) => track.stop());
       mediaStream = null;
@@ -571,16 +670,16 @@ function stopRecording() {
   }
   playCue([540, 380], 120, 35).catch(() => {});
   setStatus("Ending turn and uploading audio...");
-  stopButton.disabled = true;
+  setBusy(true);
   mediaRecorder.stop();
 }
 
-async function sendVoice(blob) {
+async function sendVoice(audioSource, filename = "browser-recording.webm", successMessage = "Voice turn complete.") {
   const formData = new FormData();
   const wellnessSignal = getWellnessSignal();
   formData.append("session_id", sessionIdInput.value.trim() || "browser-demo");
   formData.append("persona_id", selectedPersonaId());
-  formData.append("audio", blob, "browser-recording.webm");
+  formData.append("audio", audioSource, filename);
 
   const transcriptOverride = transcriptOverrideInput.value.trim();
   if (transcriptOverride) {
@@ -591,8 +690,27 @@ async function sendVoice(blob) {
     formData.append("wellness_heart_rate", String(wellnessSignal.heart_rate));
   }
 
+  if (wellnessSignal?.timestamp) {
+    formData.append("wellness_timestamp", wellnessSignal.timestamp);
+  }
+
+  if (wellnessSignal?.hrv_rmssd_ms) {
+    formData.append("wellness_hrv_rmssd_ms", String(wellnessSignal.hrv_rmssd_ms));
+  }
+
+  if (wellnessSignal?.skin_temperature_c) {
+    formData.append(
+      "wellness_skin_temperature_c",
+      String(wellnessSignal.skin_temperature_c),
+    );
+  }
+
   if (wellnessSignal?.stress_level) {
     formData.append("wellness_stress_level", wellnessSignal.stress_level);
+  }
+
+  if (wellnessSignal?.source) {
+    formData.append("wellness_source", wellnessSignal.source);
   }
 
   try {
@@ -606,7 +724,7 @@ async function sendVoice(blob) {
     }
     renderResponse(payload);
     await loadHistory();
-    setStatus("Voice turn complete.");
+    setStatus(successMessage);
   } catch (error) {
     setStatus(`Voice request failed: ${error.message}`);
   } finally {
@@ -617,13 +735,45 @@ async function sendVoice(blob) {
   }
 }
 
+async function uploadAudioTurn(event) {
+  const [file] = event.target.files;
+  if (!file) {
+    return;
+  }
+
+  if (mediaRecorder) {
+    event.target.value = "";
+    setStatus("End the current voice turn before uploading audio.");
+    return;
+  }
+
+  shouldWakeListen = false;
+  stopWakeListening();
+  setRecordingPreview(file);
+  setBusy(true);
+  setStatus("Uploading audio file to /api/voice...");
+
+  try {
+    await sendVoice(file, file.name || "uploaded-audio", "Audio upload complete.");
+  } finally {
+    event.target.value = "";
+    setBusy(false);
+  }
+}
+
 recordButton.addEventListener("click", startRecording);
 stopButton.addEventListener("click", stopRecording);
+audioUploadInput.addEventListener("change", uploadAudioTurn);
 sendTextButton.addEventListener("click", postTextMessage);
 clearConversationButton.addEventListener("click", clearConversation);
 refreshHistoryButton.addEventListener("click", loadHistory);
 playbackSpeedSelect.addEventListener("change", applyPlaybackRate);
 personaSelect.addEventListener("change", renderPersonaDetails);
+wellnessSampleSelect.addEventListener("change", applySelectedWellnessSample);
+wellnessHeartRateInput.addEventListener("input", markWellnessManual);
+wellnessHrvInput.addEventListener("input", markWellnessManual);
+wellnessSkinTemperatureInput.addEventListener("input", markWellnessManual);
+wellnessStressLevelSelect.addEventListener("change", markWellnessManual);
 textMessageInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -638,6 +788,7 @@ sessionIdInput.addEventListener("blur", loadHistory);
 applyPlaybackRate();
 applyEmotionTheme("neutral");
 loadPersonas();
+loadWellnessSamples();
 loadHistory();
 window.setTimeout(() => {
   startWakeListening();

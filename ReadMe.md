@@ -24,6 +24,7 @@ Browser text or microphone
 - Generated persona guidance cache: `corpus/persona_guidance.json`
 - Conversation table model: `app/models.py`
 - Demo scenarios: `demo/scenarios.json`
+- Wearable sample data: `demo/wellness_signals.csv`
 - Full smoke test runner: `scripts/run_full_tests.py`
 
 The easiest mode for local testing is:
@@ -312,6 +313,11 @@ The runtime context includes:
 - `conversation_history`
 - `wellness_signal`
 
+Wellness signals can include `timestamp`, `heart_rate`, `hrv_rmssd_ms`,
+`skin_temperature_c`, `stress_level`, and `source`. The bundled
+`demo/wellness_signals.csv` also includes `suggested_emotion` as a demo label;
+Jarvis does not send that label as a runtime input.
+
 If the prompt template does not include a context or user-message placeholder, `LLMService` appends the missing section automatically.
 
 ## LLM Provider Notes
@@ -489,12 +495,23 @@ curl -X POST http://127.0.0.1:8000/api/chat \
     "persona_id": "default_danny",
     "message": "I am feeling stressed. Help me choose the next step.",
     "wellness_signal": {
+      "timestamp": "2026-05-24T16:00:00",
       "heart_rate": 108,
+      "hrv_rmssd_ms": 25,
+      "skin_temperature_c": 37.0,
       "stress_level": "high",
       "source": "manual_demo"
     }
   }'
 ```
+
+### Wellness Samples
+
+```http
+GET /api/wellness-samples
+```
+
+Returns normalized rows from `demo/wellness_signals.csv`.
 
 ### Voice Upload
 
@@ -511,6 +528,8 @@ curl -X POST http://127.0.0.1:8000/api/voice \
   -F "persona_id=priya_shah" \
   -F "transcript_override=Please remember I like concise answers." \
   -F "wellness_heart_rate=92" \
+  -F "wellness_hrv_rmssd_ms=38" \
+  -F "wellness_skin_temperature_c=36.7" \
   -F "wellness_stress_level=moderate" \
   -F "audio=@sample.wav"
 ```
@@ -543,8 +562,8 @@ Main UI areas:
 - `Emotion Monitor`: visual state driven by detected emotion
 - `Session ID`: groups conversation history
 - `Transcript Override`: bypasses STT while still testing voice upload
-- `Simulated Heart Rate`: demo-only wellness signal
-- `Simulated Stress Level`: demo-only wellness signal
+- `Wearable Sample`: fills wellness controls from `demo/wellness_signals.csv`
+- `Heart Rate`, `HRV RMSSD`, `Skin Temp C`, `Stress Level`: demo-only wellness signals
 - `Start Voice Turn`: starts browser recording
 - `End Voice Turn`: stops recording and uploads the clip
 - `Send Text Turn`: sends the text box through `/api/chat`
@@ -561,7 +580,7 @@ The browser UI currently uses the default persona. API callers can pass any supp
 2. Open `/ui`.
 3. Allow microphone access if the browser asks.
 4. Keep the default session ID or type your own.
-5. Optionally set heart rate and stress level.
+5. Optionally pick a wearable sample or set the wellness inputs.
 6. Say `Hey JayJay` or click `Start Voice Turn`.
 7. Speak your message.
 8. Click `End Voice Turn`.

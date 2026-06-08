@@ -50,6 +50,7 @@ class TestRunner:
             await self.test_root(client)
             await self.test_health(client)
             await self.test_personas(client)
+            await self.test_wellness_samples(client)
             await self.test_chat(client)
             await self.test_voice(client)
         await self.test_websocket()
@@ -118,6 +119,31 @@ class TestRunner:
         except Exception as exc:
             self.add_result(name, "FAIL", str(exc))
 
+    async def test_wellness_samples(self, client: httpx.AsyncClient) -> None:
+        name = "Wellness Samples Endpoint"
+        try:
+            response = await client.get(f"{self.base_url}/api/wellness-samples")
+            if response.status_code >= 400:
+                self.add_result(
+                    name,
+                    "FAIL",
+                    await self.response_error_detail(
+                        response,
+                        "Wellness sample request failed.",
+                    ),
+                )
+                return
+
+            payload = response.json()
+            if payload and {"heart_rate", "hrv_rmssd_ms", "suggested_emotion"}.issubset(
+                payload[0].keys()
+            ):
+                self.add_result(name, "PASS", f"{len(payload)} wellness samples returned.")
+            else:
+                self.add_result(name, "FAIL", f"Unexpected payload: {payload}")
+        except Exception as exc:
+            self.add_result(name, "FAIL", str(exc))
+
     async def test_chat(self, client: httpx.AsyncClient) -> None:
         name = "Chat Endpoint"
         try:
@@ -125,6 +151,13 @@ class TestRunner:
                 "session_id": "test-chat-session",
                 "persona_id": "priya_shah",
                 "message": "What time is it? Keep your answer short.",
+                "wellness_signal": {
+                    "heart_rate": 72,
+                    "hrv_rmssd_ms": 55,
+                    "skin_temperature_c": 36.6,
+                    "stress_level": "low",
+                    "source": "smoke_test",
+                },
             }
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
             if response.status_code >= 400:
@@ -166,6 +199,11 @@ class TestRunner:
                     "session_id": "test-voice-session",
                     "persona_id": "priya_shah",
                     "transcript_override": "Please remember I like concise answers.",
+                    "wellness_heart_rate": "108",
+                    "wellness_hrv_rmssd_ms": "25",
+                    "wellness_skin_temperature_c": "37.0",
+                    "wellness_stress_level": "high",
+                    "wellness_source": "smoke_test",
                 }
                 response = await client.post(
                     f"{self.base_url}/api/voice",

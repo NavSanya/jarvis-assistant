@@ -1,0 +1,11 @@
+timestamp,heart_rate_bpm,heart_rate_variability_ms,skin_temperature_C,stress_score,suggested_emotion
+2026-05-24 08:30,72,55,36.6,low,calm
+2026-05-24 09:15,68,62,36.5,low,happy
+2026-05-24 10:00,85,42,36.7,moderate,neutral
+2026-05-24 11:00,105,28,36.9,high,fear
+2026-05-24 12:30,98,35,36.8,moderate,sad
+2026-05-24 13:45,118,22,37.1,high,angry
+2026-05-24 14:30,90,38,36.7,moderate,excited
+2026-05-24 15:30,75,50,36.5,low,calm
+2026-05-24 16:00,108,25,37.0,high,fear
+2026-05-24 17:00,82,48,36.6,moderate,surprised
